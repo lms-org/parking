@@ -53,7 +53,10 @@ bool Parking::cycle() {
 
     }
     case ParkingState::ENTERING: {
-        /* y0 = distance from second box to right side of car
+        /*
+         * Einfache Methode mit gleichsinnigem Einschlag beider Achsen
+         *
+         * y0 = distance from second box to right side of car
          * k = 0.05; //safety distance to corner of second box
          * alpha_max = 32*pi/180; //maximum steering angle
          * l = 0.25;
@@ -61,7 +64,7 @@ bool Parking::cycle() {
          * x_begin_steering = x0 - l;
          *
          * if (x_now <= x_begin_steering) -> set servos to max steering angle
-         * else -> drive straight backwards
+         * else -> drive straight backwards still
          *
          * if (ToF_back <= 0.05) {
          *    -> stop moving
