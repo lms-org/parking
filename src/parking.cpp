@@ -1,10 +1,12 @@
 #include "parking.h"
 
 
-bool Parking::initialize() {
-    start_time = clock();
+bool Parking::initialize() {    
 
     currentState = ParkingState::SEARCHING;
+    firstCircleArc = true;
+    drivenArcLength = 0;
+    parkingSpaceSize = 0;
 
     return true;
 }
@@ -30,13 +32,11 @@ bool Parking::cycle() {
         x_position.push_back(0.01*counter); //simulierte Fahrt mit 0.01m Inkrement pro Zyklus (entspricht 1m/s bei 100Hz)
 
         //Parklueckenerkennung
-        start_time = clock();
         bool foundParkingSpace = Parking::parkingSpaceDetection(&x_position, &measured_distance, &ps_x_start, &ps_x_end);
-        double time = (double)(clock() - start_time)/CLOCKS_PER_SEC;
 
         if (foundParkingSpace) {
 
-            double parkingSpaceSize = ps_x_end - ps_x_start;
+            parkingSpaceSize = ps_x_end - ps_x_start;
 
             logger.debug("parking") << "parking space detected: ps_x_start=" << ps_x_start << " \t ps_x_end=" << ps_x_end << "size=" << parkingSpaceSize;
 
@@ -56,21 +56,62 @@ bool Parking::cycle() {
         /*
          * Einfache Methode mit gleichsinnigem Einschlag beider Achsen
          *
-         * y0 = distance from second box to right side of car
-         * k = 0.05; //safety distance to corner of second box
-         * alpha_max = 32*pi/180; //maximum steering angle
-         * l = 0.25;
-         * x0 = y0/tan(alpha_max) - k; //distance from end of parking spot (detected edge) to front of car
-         * x_begin_steering = x0 - l;
+         * double y0 = distance from second box to right side of car
+         * double k = 0.05; //safety distance to corner of second box
+         * double delta_max = 32*pi/180; //maximum steering angle
+         * double l = 0.25;
+         * double x0 = y0/tan(delta_max) - k; //distance from end of parking spot (detected edge) to front of car
+         * double x_begin_steering = x0 - l;
          *
          * if (x_now <= x_begin_steering) -> set servos to max steering angle
          * else -> drive straight backwards still
          *
          * if (ToF_back <= 0.05) {
-         *    -> stop moving
+         *    -> stop moving         *    
          *    currentState = ParkingState::CORRECTING;
          * }
          */
+
+        /*
+         * Bessere Methode mit 2 Kreisboegen
+         */
+        double y0 = 0;  //distance from second box to right side of car
+        double lr = 0.21; //Radstand
+        double l = 0.3; //Fahrzeuglänge
+        double b = 0.2; //Fahrzeugbreite
+        double delta_max = 32*M_PI/180; //maximum steering angle
+        double r = lr/2*tan(M_PI/2 - delta_max); //Radius des Wendekreises bei Volleinschlag beider Achsen
+
+        double k = 0.05;
+        double d = 0.03;
+
+        double R = sqrt(l*l/4 + (r+b/2)*(r+b/2));
+        double s = sqrt((R+k)*(R+k) - (parkingSpaceSize - d - l/2)*(parkingSpaceSize - d - l/2));
+        double alpha = acos((r-y0+s)/(2*r)); //Winkel (in rad) der 2 Kreisboegen, die zum einfahren genutzt werden
+        double x0 = d + l/2 + 2*r*sin(alpha) - parkingSpaceSize; //Abstand vom Ende der 2. Box zur Mitte des Fahrzeugs bei Lenkbeginn (Anfang erster Kreisbogen)
+
+        double d_mid2cam = lr/2; //Abstand von Fahrzeugmitte zur Kamera
+        double x_begin_steering = x0 - d_mid2cam;
+
+        double x_now = 0; //Momentante x-Position entlang der Straße (ausgehend vom Parkbeginn x=0)
+        if (x_now <= x_begin_steering) {
+             if (firstCircleArc) {
+                 //-> set servos to max steering angle
+                 drivenArcLength += 0; //Distanzschritt vom Hall/Drehgeber;
+                 if (drivenArcLength >= alpha) {
+                     firstCircleArc = false;
+                     drivenArcLength = 0;
+                 }
+             }
+             else {
+                 //-> set servos to max steering angle in other direction
+                 drivenArcLength += 0; //Distanzschritt vom Hall/Drehgeber;
+                 if (drivenArcLength >= alpha) {
+                     currentState = ParkingState::CORRECTING;
+                 }
+             }
+        }
+        else {} // -> drive straight backwards still
 
 
 
@@ -121,7 +162,7 @@ bool Parking::parkingSpaceDetection(std::vector<double> *x_pos, std::vector<doub
 
     //remove outliers
     for (unsigned int i=0; i < dst->size()-1; ++i) {
-        if (dst->at(k) < 7) dst->at(k) = dst->at(k+1); //works if the outlier is only a single measurement
+        if (dst->at(i) < 7) dst->at(i) = dst->at(i+1); //works if the outlier is only a single measurement
     }
 
     //main worker loop

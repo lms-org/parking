@@ -19,7 +19,8 @@ public:
     std::vector<double> x_position;
     enum class ParkingState {SEARCHING, STOPPING, ENTERING, CORRECTING, FINISHED};
     ParkingState currentState;
-    double ps_x_start, ps_x_end, y0, x0;
+    double ps_x_start, ps_x_end, y0, x0, drivenArcLength, parkingSpaceSize;
+    bool firstCircleArc; //true: Fahrzeug befindet sich im ersten Kreisbogen
 
 };
 
