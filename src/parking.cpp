@@ -28,7 +28,7 @@ bool Parking::cycle() {
         // Fake Messwerte holen
         double dst = Parking::fakeLaserDistanceSensor();
 
-        measured_distance.push_back(dst);
+        measured_distance.push_back(dst/10); // in Meter umrechnen!!!!
         x_position.push_back(0.01*counter); //simulierte Fahrt mit 0.01m Inkrement pro Zyklus (entspricht 1m/s bei 100Hz)
 
         //Parklueckenerkennung
@@ -49,7 +49,9 @@ bool Parking::cycle() {
 
     case ParkingState::STOPPING: {
 
+        //TODO
         // if (car has stopped) currentState = ParkingState::ENTERING;
+        currentState = ParkingState::ENTERING;
 
     }
     case ParkingState::ENTERING: {
@@ -75,25 +77,25 @@ bool Parking::cycle() {
         /*
          * Bessere Methode mit 2 Kreisboegen
          */
-        double y0 = 0;  //distance from second box to right side of car
-        double lr = 0.21; //Radstand
-        double l = 0.3; //Fahrzeuglänge
-        double b = 0.2; //Fahrzeugbreite
-        double delta_max = 32*M_PI/180; //maximum steering angle
+        double y0 = 0.2;  //TODO: distance from second box to right side of car
+        double lr = config().get("wheelbase", 0.21); //Radstand
+        double l = config().get("carLength", 0.32);  //Fahrzeuglänge
+        double b = config().get("carWidth", 0.2); //Fahrzeugbreite
+        double delta_max = config().get("maxSteeringAngle", 24)*M_PI/180; //maximum steering angle
         double r = lr/2*tan(M_PI/2 - delta_max); //Radius des Wendekreises bei Volleinschlag beider Achsen
 
-        double k = 0.05;
-        double d = 0.03;
+        double k = config().get("k", 0.05);
+        double d = config().get("d", 0.03);
 
-        double R = sqrt(l*l/4 + (r+b/2)*(r+b/2));
+        double R = sqrt(l*l/4 + (r+b/2)*(r+b/2)); //Radius den das äußerste Eck des Fahrzeugs bei volleingeschlagenen Rädern zurücklegt
         double s = sqrt((R+k)*(R+k) - (parkingSpaceSize - d - l/2)*(parkingSpaceSize - d - l/2));
         double alpha = acos((r-y0+s)/(2*r)); //Winkel (in rad) der 2 Kreisboegen, die zum einfahren genutzt werden
         double x0 = d + l/2 + 2*r*sin(alpha) - parkingSpaceSize; //Abstand vom Ende der 2. Box zur Mitte des Fahrzeugs bei Lenkbeginn (Anfang erster Kreisbogen)
 
-        double d_mid2cam = lr/2; //Abstand von Fahrzeugmitte zur Kamera
-        double x_begin_steering = x0 - d_mid2cam;
+        double d_mid2lidar = config().get("distanceMid2Lidar", 0.04); //Abstand von Fahrzeugmitte zur Lidar
+        double x_begin_steering = x0 - d_mid2lidar;
 
-        double x_now = 0; //Momentante x-Position entlang der Straße (ausgehend vom Parkbeginn x=0)
+        double x_now = 0; //TODO: Momentante x-Position entlang der Straße (ausgehend vom Parkbeginn x=0)
         if (x_now <= x_begin_steering) {
              if (firstCircleArc) {
                  //-> set servos to max steering angle
@@ -160,8 +162,10 @@ bool Parking::parkingSpaceDetection(std::vector<double> *x_pos, std::vector<doub
 
     double grad=0, d0=0, d1=0, sz=0;
 
-    //remove outliers
+    //remove outliers and limit distance
+    double maxDst = config().get("maxLidarDistance", 0.4);
     for (unsigned int i=0; i < dst->size()-1; ++i) {
+        if (dst->at(i) > maxDst) dst->at(i) = maxDst;
         if (dst->at(i) < 7) dst->at(i) = dst->at(i+1); //works if the outlier is only a single measurement
     }
 
