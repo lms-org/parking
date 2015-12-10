@@ -9,4 +9,4 @@ set(HEADERS
 
 include_directories(include)
 add_library(parking MODULE ${SOURCES} ${HEADERS})
-target_link_libraries(parking PRIVATE lmscore)
+target_link_libraries(parking PRIVATE lmscore phoenix_CC2016_service)
