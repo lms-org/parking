@@ -1,4 +1,5 @@
 #include "parking.h"
+#include "phoenix_CC2016_service/phoenix_CC2016_service.h"
 
 
 bool Parking::initialize() {    
@@ -18,6 +19,10 @@ bool Parking::deinitialize() {
 }
 
 bool Parking::cycle() {
+    if(getService<phoenix_CC2016_service::Phoenix_CC2016Service>("PHOENIX_SERVICE")->driveMode() != phoenix_CC2016_service::CCDriveMode::PARKING){
+        //TODO remove parking car-control-state
+        return true;
+    }
 
     switch (currentState) {
 
