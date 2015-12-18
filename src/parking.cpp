@@ -9,47 +9,122 @@ bool Parking::initialize() {
     drivenArcLength = 0;
     parkingSpaceSize = 0;
 
+    mavlinkChannel = readChannel<Mavlink::Data>("MAVLINK_IN");
+    currentXPosition = 0;
+    lastTimeStamp = -1;
+    lastValidMeasurement = 0.5;
+
+
+
+    logger.debug("init") << "init";
+
+
+    myfile.open ("data.csv");
+
     return true;
 }
 
 bool Parking::deinitialize() {
-    measured_distance.clear();
-    x_position.clear();
+    distanceMeasurement.clear();
+    xPosition.clear();
     return true;
 }
 
 bool Parking::cycle() {
-    if(getService<phoenix_CC2016_service::Phoenix_CC2016Service>("PHOENIX_SERVICE")->driveMode() != phoenix_CC2016_service::CCDriveMode::PARKING){
+
+    //logger.debug("cycle") << "cycle";
+
+
+    /*if(getService<phoenix_CC2016_service::Phoenix_CC2016Service>("PHOENIX_SERVICE")->driveMode() != phoenix_CC2016_service::CCDriveMode::PARKING){
         //TODO remove parking car-control-state
         return true;
-    }
+    }*/
+
+    usleep(2000);
 
     switch (currentState) {
 
     case ParkingState::SEARCHING: {
 
-        ++counter;
+        ++counter;      
 
-        // Fake Messwerte holen
-        double dst = Parking::fakeLaserDistanceSensor();
+        double velocity = 0; //konstate Testgeschwindigkeit, TODO
+        int velCount = 0;
 
-        measured_distance.push_back(dst/10); // in Meter umrechnen!!!!
-        x_position.push_back(0.01*counter); //simulierte Fahrt mit 0.01m Inkrement pro Zyklus (entspricht 1m/s bei 100Hz)
+        for( const auto& msg : *mavlinkChannel )
+        {
+            if (msg.msgid == MAVLINK_MSG_ID_ODOMETER_DELTA) {
+                mavlink_odometer_delta_t velocityMesage;                
+                mavlink_msg_odometer_delta_decode(&msg, &velocityMesage);                
+                if (msg.compid == 0) { //0 = Hall
+                   velocity += velocityMesage.xvelocity;
+                   ++velCount;
+                }
+            }
+        }
+        if (velCount > 0) velocity /= velCount; //average velocity in one timestep of the framework
+
+        for( const auto& msg : *mavlinkChannel )
+        {
+            if (msg.msgid == MAVLINK_MSG_ID_PROXIMITY && counter > 5) {  //counter > 1 nur für debugging, da extrem viele messwerte in den ersten paar frames auftauchen
+                mavlink_proximity_t distanceMsg;
+                mavlink_msg_proximity_decode(&msg, &distanceMsg);
+                double distance = distanceMsg.distance;
+                if (distance > 0.5) distance = 0.5;
+                if (distance < 0.09) distance = lastValidMeasurement;
+
+                distanceMeasurement.push_back(distance); //add the measurement to the distance vector
+                lastValidMeasurement = distance;
+
+                if (lastTimeStamp < 0) {
+                    xPosition.push_back(currentXPosition); //at first iteration of framework
+                    lastTimeStamp = distanceMsg.timestamp;
+                }
+                else {
+                    currentXPosition += velocity*(distanceMsg.timestamp - lastTimeStamp)/1000000.0; //update x-position (timestamp is in us)
+                    lastTimeStamp = distanceMsg.timestamp; //update timestamp
+                    xPosition.push_back(currentXPosition); //add x-position to the position vector
+                }
+                //myfile << currentXPosition << ", " << distance << std::endl;
+            }
+        }
+        //std::cout << std::endl;
+
+        //cut size of vectors
+        if (distanceMeasurement.size() > 5000) {
+            distanceMeasurement.erase(distanceMeasurement.begin(), distanceMeasurement.begin() + distanceMeasurement.size()-5000);
+            xPosition.erase(xPosition.begin(), xPosition.begin() + xPosition.size()-5000); // has the same size as distanceMeasurement
+        }
+
+
+
+        /*if (counter > 1000) {
+            convolution.assign(distanceMeasurement.size(), 0);
+            convolve1D(&distanceMeasurement, &convolution, (int)distanceMeasurement.size(), &gaussWin, (int)gaussWin.size());
+            for (int i = 0; i < convolution.size(); ++i) {
+                myfile << xPosition[i] << "," << distanceMeasurement[i] << ","<< convolution[i]  << std::endl;
+            }
+
+            usleep(20000000);
+        }*/
+
 
         //Parklueckenerkennung
-        bool foundParkingSpace = Parking::parkingSpaceDetection(&x_position, &measured_distance, &ps_x_start, &ps_x_end);
+        bool foundParkingSpace = Parking::parkingSpaceDetection(&xPosition, &distanceMeasurement, &ps_x_start, &ps_x_end);
 
         if (foundParkingSpace) {
 
             parkingSpaceSize = ps_x_end - ps_x_start;
 
-            logger.debug("parking") << "parking space detected: ps_x_start=" << ps_x_start << " \t ps_x_end=" << ps_x_end << "size=" << parkingSpaceSize;
+            logger.debug("parking") << "parking space detected: ps_x_start=" << ps_x_start << "\t ps_x_end=" << ps_x_end << "\t size=" << parkingSpaceSize;
 
-            if (parkingSpaceSize > 0.45 && parkingSpaceSize < 0.6) currentState = ParkingState::STOPPING;
+            if (parkingSpaceSize > 0.45 && parkingSpaceSize < 0.6) ;//currentState = ParkingState::STOPPING;
         }
         else {
-            logger.debug("parking") << "ps_x_start=" << ps_x_start << " \t ps_x_end=" << ps_x_end;
+            //logger.debug("parking") << "ps_x_start=" << ps_x_start << " \t ps_x_end=" << ps_x_end;
         }
+
+        return true;
     }
 
     case ParkingState::STOPPING: {
@@ -154,7 +229,7 @@ bool Parking::parkingSpaceDetection(std::vector<double> *x_pos, std::vector<doub
      */
 
     int s = 3; //smoothing (ungerade Zahl >= 3)
-    double gradient_thresh = 200; //Threshold für die Erkennung von Bergen im Gradientenverlauf (dort sind die Kanten)
+    double gradient_thresh = 0.17; //Threshold für die Erkennung von Bergen im Gradientenverlauf (dort sind die Kanten)
 
     *x_start = 0;
     *x_end = 0;
@@ -168,29 +243,49 @@ bool Parking::parkingSpaceDetection(std::vector<double> *x_pos, std::vector<doub
     double grad=0, d0=0, d1=0, sz=0;
 
     //remove outliers and limit distance
-    double maxDst = config().get("maxLidarDistance", 0.4);
+    /*double maxDst = config().get("maxLidarDistance", 0.5);
+    double lastValid = 0;
     for (unsigned int i=0; i < dst->size()-1; ++i) {
-        if (dst->at(i) > maxDst) dst->at(i) = maxDst;
-        if (dst->at(i) < 7) dst->at(i) = dst->at(i+1); //works if the outlier is only a single measurement
-    }
+        if (dst->at(i) > 0.5) dst->at(i) = 0.5; //cut big distances
+
+        if (dst->at(i+1) < 0.05) { //invalid too small measurements
+            //dst->at(i) = lastValid;
+            //std::cout << dst->at(i) << std::endl;
+            dst->at(i+1) = dst->at(i);
+        }
+        else {
+            //lastValid = dst->at(i);
+        }
+        //if (dst->at(i) < 0.5 && dst->at(i) > 0.05) std::cout << dst->at(i) << " ";
+    }*/
+    //std::cout << std::endl;
 
     //main worker loop
     for (unsigned int i=side_step; i < dst->size()-side_step-1; ++i) {
 
         //smoothing
-        for (unsigned int k=i-side_step; k <= i + side_step; ++k) {
+        /*for (unsigned int k=i-side_step; k <= i + side_step; ++k) {
             d0 += dst->at(k);
             d1 += dst->at(k+1);
         }
         d0 /= s;
-        d1 /= s;
+        d1 /= s;*/
+        d0 = dst->at(i);
+        d1 = dst->at(i+1);
+
 
         //gradient
-        grad = (d1-d0)/(x_pos->at(i+1) - x_pos->at(i));
+        //grad = (d1-d0)/(x_pos->at(i+1) - x_pos->at(i));
+        grad = d1-d0;
+        if (fabs(grad) > gradient_thresh) {
+            //std::cout << "grad: " << grad << std::endl;
+        }
 
-        if (counter == 50) std::cout << " " << grad;
 
-        if (abs(grad) > gradient_thresh) {
+
+        //if ((dst->at(i+1) - dst->at(i)) > 0 )std::cout << " " << (dst->at(i+1) - dst->at(i));
+
+        if (fabs(grad) > gradient_thresh) {
             if (starter == -1) {
                 starter = i;
                 sz = x_pos->at(i+1) - x_pos->at(i);
@@ -217,6 +312,36 @@ bool Parking::parkingSpaceDetection(std::vector<double> *x_pos, std::vector<doub
     if ((*x_start != 0 && *x_end != 0) && (*x_start < *x_end)) return true;
 
     return false;
+
+}
+
+void Parking::convolve1D(std::vector<double> *in, std::vector<double> *out, int dataSize, std::vector<double> *kernel, int kernelSize)
+{
+    int i, j, k;
+
+    // check validity of params
+    //if(!in || !out || !kernel) return false;
+    //if(dataSize <=0 || kernelSize <= 0) return false;
+
+    // start convolution from out[kernelSize-1] to out[dataSize-1] (last)
+    for(i = kernelSize-1; i < dataSize; ++i)
+    {
+        out->at(i) = 0;                             // init to 0 before accumulate
+
+        for(j = i, k = 0; k < kernelSize; --j, ++k)
+            //out[i] += in[j] * kernel[k];
+            out->at(i) += in->at(j) * kernel->at(k);
+    }
+
+    // convolution from out[0] to out[kernelSize-2]
+    for(i = 0; i < kernelSize - 1; ++i)
+    {
+        out->at(i) = 0;                             // init to 0 before sum
+
+        for(j = i, k = 0; j >= 0; --j, ++k)
+            //out[i] += in[j] * kernel[k];
+            out->at(i) += in->at(j) * kernel->at(k);
+    }
 
 }
 
