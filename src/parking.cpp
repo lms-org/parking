@@ -17,10 +17,8 @@ bool Parking::initialize() {
     lastTimeStamp = -1;
     lastValidMeasurement = 0.5;
 
-
-
-    logger.debug("init") << "init";
-
+    edgePosition.assign(100, 0);
+    edgeType.assign(100, 0);
 
     //myfile.open ("data.csv");
 
@@ -35,15 +33,12 @@ bool Parking::deinitialize() {
 
 bool Parking::cycle() {
 
-    //logger.debug("cycle") << "cycle";
-
-
     /*if(getService<phoenix_CC2016_service::Phoenix_CC2016Service>("PHOENIX_SERVICE")->driveMode() != phoenix_CC2016_service::CCDriveMode::PARKING){
         //TODO remove parking car-control-state
         return true;
     }*/
-logger.debug("parking") << "start";
-    usleep(2000);
+
+    //usleep(3000);
 
     switch (currentState) {
 
@@ -51,7 +46,7 @@ logger.debug("parking") << "start";
 
         ++counter;      
 
-        double velocity = 0; //konstate Testgeschwindigkeit, TODO
+        double velocity = 0;
         int velCount = 0;
 
         for( const auto& msg : *mavlinkChannel )
@@ -93,45 +88,38 @@ logger.debug("parking") << "start";
         }
         //std::cout << std::endl;
 
-        //cut size of vectors
-        /*if (distanceMeasurement.size() > 5000) {
-            distanceMeasurement.erase(distanceMeasurement.begin(), distanceMeasurement.begin() + distanceMeasurement.size()-5000);
-            xPosition.erase(xPosition.begin(), xPosition.begin() + xPosition.size()-5000); // has the same size as distanceMeasurement
-        }*/
+        int numEdges = 0;
 
+        Parking::findEdges(&distanceMeasurement, &xPosition, &edgePosition, &edgeType, &numEdges);
 
+        logger.debug("parking") << edgePosition.at(0) << ", " << edgePosition.at(1) << ", " << edgePosition.at(2) << ", " << edgePosition.at(3) << ", " << edgePosition.at(4)<< ", " << edgePosition.at(5);
+        logger.debug("parking") << edgeType.at(0) << ", " << edgeType.at(1) << ", " << edgeType.at(2) << ", " << edgeType.at(3) << ", " << edgeType.at(4)<< ", " << edgeType.at(5);
 
-        /*if (counter > 1000) {
-            convolution.assign(distanceMeasurement.size(), 0);
-            convolve1D(&distanceMeasurement, &convolution, (int)distanceMeasurement.size(), &gaussWin, (int)gaussWin.size());
-            for (int i = 0; i < convolution.size(); ++i) {
-                myfile << xPosition[i] << "," << distanceMeasurement[i] << ","<< convolution[i]  << std::endl;
+        //Logik zur Lückenerkennung
+        double startOfSpace = 0.0;
+        bool spaceStarted = false;
+        bool validSpaceDetected = false;
+        double size, startX, endX;
+        for (int i=0; i < numEdges; ++i)
+        {
+            if (edgeType.at(i) == -1)
+            {
+                spaceStarted = true;
+                startX = edgePosition.at(i);
             }
-
-            usleep(20000000);
-        }*/
-        std::vector<double> edgePosition(10);
-        std::vector<double> edgeType(10);
-        logger.debug("parking") << "begin";
-        Parking::findEdges(&distanceMeasurement, &xPosition, &edgePosition, &edgeType);
-
-        logger.debug("parking") << edgePosition.at(0) << ", " << edgePosition.at(1) << ", " << edgePosition.at(2);
-
-
-        //Parklueckenerkennung
-        /*bool foundParkingSpace = Parking::parkingSpaceDetection(&xPosition, &distanceMeasurement, &ps_x_start, &ps_x_end);
-
-        if (foundParkingSpace) {
-
-            parkingSpaceSize = ps_x_end - ps_x_start;
-
-            logger.debug("parking") << "parking space detected: ps_x_start=" << ps_x_start << "\t ps_x_end=" << ps_x_end << "\t size=" << parkingSpaceSize;
-
-            if (parkingSpaceSize > 0.45 && parkingSpaceSize < 0.6) ;//currentState = ParkingState::STOPPING;
+            if (edgeType.at(i) == 1 && spaceStarted)
+            {
+                size = edgePosition.at(i) - startX;
+                if (size >= config().get("minParkingSpaceSize", 0.50) && size <= config().get("maxParkingSpaceSize", 0.65))
+                {
+                    validSpaceDetected = true;
+                    endX =  edgePosition.at(i);
+                    //currentState = ParkingState::STOPPING;
+                    logger.debug("praking") << "valid space: size=" << size << ", startX=" << startX << ", endX=" << endX;
+                    break;
+                }
+            }
         }
-        else {
-            //logger.debug("parking") << "ps_x_start=" << ps_x_start << " \t ps_x_end=" << ps_x_end;
-        }*/
 
         return true;
     }
@@ -227,191 +215,50 @@ logger.debug("parking") << "start";
 }
 
 
-bool Parking::parkingSpaceDetection(std::vector<double> *x_pos, std::vector<double> *dst, double *x_start, double *x_end) {
 
-    /* algorithm:
-     * 1. moving average with window size s
-     * 2. calculate gradients
-     * 3. set all values which are too close at 0 to 0 (with threshold gradient_thresh)
-     * 4. search for connected regions and extract their middle point as an edge
-     * -> all these operations are done in a single for loop
-     */
-
-    int s = 3; //smoothing (ungerade Zahl >= 3)
-    double gradient_thresh = 0.17; //Threshold für die Erkennung von Bergen im Gradientenverlauf (dort sind die Kanten)
-
-    *x_start = 0;
-    *x_end = 0;
-
-    if (dst->size() < 5) return false;
-
-    int side_step = (s-1)/2;
-    int starter = -1;
-    int edge_type = 0;
-
-    double grad=0, d0=0, d1=0, sz=0;
-
-    //remove outliers and limit distance
-    /*double maxDst = config().get("maxLidarDistance", 0.5);
-    double lastValid = 0;
-    for (unsigned int i=0; i < dst->size()-1; ++i) {
-        if (dst->at(i) > 0.5) dst->at(i) = 0.5; //cut big distances
-
-        if (dst->at(i+1) < 0.05) { //invalid too small measurements
-            //dst->at(i) = lastValid;
-            //std::cout << dst->at(i) << std::endl;
-            dst->at(i+1) = dst->at(i);
-        }
-        else {
-            //lastValid = dst->at(i);
-        }
-        //if (dst->at(i) < 0.5 && dst->at(i) > 0.05) std::cout << dst->at(i) << " ";
-    }*/
-    //std::cout << std::endl;
-
-    //main worker loop
-    for (unsigned int i=side_step; i < dst->size()-side_step-1; ++i) {
-
-        //smoothing
-        /*for (unsigned int k=i-side_step; k <= i + side_step; ++k) {
-            d0 += dst->at(k);
-            d1 += dst->at(k+1);
-        }
-        d0 /= s;
-        d1 /= s;*/
-        d0 = dst->at(i);
-        d1 = dst->at(i+1);
-
-
-        //gradient
-        //grad = (d1-d0)/(x_pos->at(i+1) - x_pos->at(i));
-        grad = d1-d0;
-        if (fabs(grad) > gradient_thresh) {
-            //std::cout << "grad: " << grad << std::endl;
-        }
-
-
-
-        //if ((dst->at(i+1) - dst->at(i)) > 0 )std::cout << " " << (dst->at(i+1) - dst->at(i));
-
-        if (fabs(grad) > gradient_thresh) {
-            if (starter == -1) {
-                starter = i;
-                sz = x_pos->at(i+1) - x_pos->at(i);
-                if (grad > 0) edge_type = 1; //positive Kante: Beginn einer Lücke
-                else edge_type = -1; // negative Kante: Ende einer Lücke
-            }
-            else {
-                sz += x_pos->at(i+1) - x_pos->at(i);
-            }
-        }
-        else {
-            if (starter > -1) {
-                if (edge_type == 1) {
-                    *x_start = x_pos->at(starter) + sz/(i-starter);
-                }
-                else {
-                    *x_end = x_pos->at(starter) + sz/(i-starter);
-                }
-                starter = -1;
-            }
-        }
-    }
-
-    if ((*x_start != 0 && *x_end != 0) && (*x_start < *x_end)) return true;
-
-    return false;
-
-}
-
-void Parking::findEdges(std::vector<double> *dst, std::vector<double> *x, std::vector<double> *edgePosition, std::vector<double> *edgeType)
+void Parking::findEdges(std::vector<double> *dst, std::vector<double> *x, std::vector<double> *edgePosition, std::vector<double> *edgeType, int *numEdges)
 {
-    //grobe Suche
-    //std::vector<double> kernelGrob {0.6627, 0, -0.6627};
-    double gradThreshGrob = 0.2;
 
-    int res = 10;
+    int res = 20;
+
+    if (dst->size() < 4*res) return;
+
+    double gradThreshGrob = 0.16;
+
+
     int numEdge = 0;
-    int i, k, m;
+    int i, m;
     double grad, maxGrad;
-    maxGrad = 0.0;
-    for(i=res; i < dst->size() - res; i += res)
+
+    for(i=res; i < dst->size()-res; i += res)
     {
         grad = dst->at(i+res) - dst->at(i-res);
 
         if (fabs(grad) > gradThreshGrob)
         {
-            for (m=i-res+1; m < 2*res; ++m)
+            maxGrad = 0.0;
+            for (m=i-res+1; m<i+res-1; ++m)
             {
                 grad = dst->at(m+1) - dst->at(m-1);
+
                 if(fabs(grad) > fabs(maxGrad))
                 {
                     maxGrad = grad;
                 }
-                edgePosition->at(numEdge) = x->at(m);
-                edgeType->at(numEdge) = maxGrad > 0 ? 1 : -1;
             }
+            edgePosition->at(numEdge) = x->at(m);
+            edgeType->at(numEdge) = maxGrad > 0 ? -1 : 1;
+
+            ++numEdge;
+            i += res;
         }
     }
 
-    /*int i, j, k, n, ks2, index;
-    index = 0;
-    n = numSkip + 1;
-    ks2 = (kernelSize-1)/2;
+    *numEdges = numEdge;
 
-    for(i = n*ks2; i < dataSize - n*ks2; i+=n)
-    {
-        out->at(index) = 0;                             // init to 0 before accumulate
-
-        for(j = i - n*ks2, k = 0; k < kernelSize; j+=n, ++k)
-            out->at(index) += in->at(j) * kernel->at(k);
-
-        ++index;
-    }*/
-
-    /*int i, j, k, n, ks2;
-    n = numSkip + 1;
-    ks2 = (kernelSize-1)/2;
-
-    for(i = n*ks2; i < dataSize - n*ks2; ++i)
-    {
-        out->at(i) = 0;                             // init to 0 before accumulate
-
-        for(j = i*numSkip + ks2*n, k = 0; k < kernelSize; j-=n, ++k)
-            out->at(i) += in->at(j) * kernel->at(k);
-    }*/
 
 }
 
-void Parking::convolve1D(std::vector<double> *in, std::vector<double> *out, int dataSize, std::vector<double> *kernel, int kernelSize)
-{
-    int i, j, k;
-
-    // check validity of params
-    //if(!in || !out || !kernel) return false;
-    //if(dataSize <=0 || kernelSize <= 0) return false;
-
-    // start convolution from out[kernelSize-1] to out[dataSize-1] (last)
-    for(i = kernelSize-1; i < dataSize; ++i)
-    {
-        out->at(i) = 0;                             // init to 0 before accumulate
-
-        for(j = i, k = 0; k < kernelSize; --j, ++k)
-            //out[i] += in[j] * kernel[k];
-            out->at(i) += in->at(j) * kernel->at(k);
-    }
-
-    // convolution from out[0] to out[kernelSize-2]
-    for(i = 0; i < kernelSize - 1; ++i)
-    {
-        out->at(i) = 0;                             // init to 0 before sum
-
-        for(j = i, k = 0; j >= 0; --j, ++k)
-            //out[i] += in[j] * kernel[k];
-            out->at(i) += in->at(j) * kernel->at(k);
-    }
-
-}
 
 double Parking::fakeLaserDistanceSensor() {
 
