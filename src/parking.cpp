@@ -2,7 +2,10 @@
 #include "phoenix_CC2016_service/phoenix_CC2016_service.h"
 
 
-bool Parking::initialize() {    
+bool Parking::initialize() {
+
+    logger.debug("init") << "init1";
+
 
     currentState = ParkingState::SEARCHING;
     firstCircleArc = true;
@@ -19,7 +22,7 @@ bool Parking::initialize() {
     logger.debug("init") << "init";
 
 
-    myfile.open ("data.csv");
+    //myfile.open ("data.csv");
 
     return true;
 }
@@ -39,7 +42,7 @@ bool Parking::cycle() {
         //TODO remove parking car-control-state
         return true;
     }*/
-
+logger.debug("parking") << "start";
     usleep(2000);
 
     switch (currentState) {
@@ -91,10 +94,10 @@ bool Parking::cycle() {
         //std::cout << std::endl;
 
         //cut size of vectors
-        if (distanceMeasurement.size() > 5000) {
+        /*if (distanceMeasurement.size() > 5000) {
             distanceMeasurement.erase(distanceMeasurement.begin(), distanceMeasurement.begin() + distanceMeasurement.size()-5000);
             xPosition.erase(xPosition.begin(), xPosition.begin() + xPosition.size()-5000); // has the same size as distanceMeasurement
-        }
+        }*/
 
 
 
@@ -107,10 +110,16 @@ bool Parking::cycle() {
 
             usleep(20000000);
         }*/
+        std::vector<double> edgePosition(10);
+        std::vector<double> edgeType(10);
+        logger.debug("parking") << "begin";
+        Parking::findEdges(&distanceMeasurement, &xPosition, &edgePosition, &edgeType);
+
+        logger.debug("parking") << edgePosition.at(0) << ", " << edgePosition.at(1) << ", " << edgePosition.at(2);
 
 
         //Parklueckenerkennung
-        bool foundParkingSpace = Parking::parkingSpaceDetection(&xPosition, &distanceMeasurement, &ps_x_start, &ps_x_end);
+        /*bool foundParkingSpace = Parking::parkingSpaceDetection(&xPosition, &distanceMeasurement, &ps_x_start, &ps_x_end);
 
         if (foundParkingSpace) {
 
@@ -122,7 +131,7 @@ bool Parking::cycle() {
         }
         else {
             //logger.debug("parking") << "ps_x_start=" << ps_x_start << " \t ps_x_end=" << ps_x_end;
-        }
+        }*/
 
         return true;
     }
@@ -312,6 +321,65 @@ bool Parking::parkingSpaceDetection(std::vector<double> *x_pos, std::vector<doub
     if ((*x_start != 0 && *x_end != 0) && (*x_start < *x_end)) return true;
 
     return false;
+
+}
+
+void Parking::findEdges(std::vector<double> *dst, std::vector<double> *x, std::vector<double> *edgePosition, std::vector<double> *edgeType)
+{
+    //grobe Suche
+    //std::vector<double> kernelGrob {0.6627, 0, -0.6627};
+    double gradThreshGrob = 0.2;
+
+    int res = 10;
+    int numEdge = 0;
+    int i, k, m;
+    double grad, maxGrad;
+    maxGrad = 0.0;
+    for(i=res; i < dst->size() - res; i += res)
+    {
+        grad = dst->at(i+res) - dst->at(i-res);
+
+        if (fabs(grad) > gradThreshGrob)
+        {
+            for (m=i-res+1; m < 2*res; ++m)
+            {
+                grad = dst->at(m+1) - dst->at(m-1);
+                if(fabs(grad) > fabs(maxGrad))
+                {
+                    maxGrad = grad;
+                }
+                edgePosition->at(numEdge) = x->at(m);
+                edgeType->at(numEdge) = maxGrad > 0 ? 1 : -1;
+            }
+        }
+    }
+
+    /*int i, j, k, n, ks2, index;
+    index = 0;
+    n = numSkip + 1;
+    ks2 = (kernelSize-1)/2;
+
+    for(i = n*ks2; i < dataSize - n*ks2; i+=n)
+    {
+        out->at(index) = 0;                             // init to 0 before accumulate
+
+        for(j = i - n*ks2, k = 0; k < kernelSize; j+=n, ++k)
+            out->at(index) += in->at(j) * kernel->at(k);
+
+        ++index;
+    }*/
+
+    /*int i, j, k, n, ks2;
+    n = numSkip + 1;
+    ks2 = (kernelSize-1)/2;
+
+    for(i = n*ks2; i < dataSize - n*ks2; ++i)
+    {
+        out->at(i) = 0;                             // init to 0 before accumulate
+
+        for(j = i*numSkip + ks2*n, k = 0; k < kernelSize; j-=n, ++k)
+            out->at(i) += in->at(j) * kernel->at(k);
+    }*/
 
 }
 
