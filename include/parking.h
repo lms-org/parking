@@ -13,9 +13,8 @@ public:
     bool cycle();
 
     void findEdges(std::vector<double> *dst, std::vector<double> *x, std::vector<double> *edgePosition, std::vector<double> *edgeType, int *numEdges);
-    double fakeLaserDistanceSensor();
 
-    int counter = 0;
+    int cycleCounter;
     std::vector<double> distanceMeasurement;
     std::vector<double> xPosition;
     std::vector<double> edgePosition;
@@ -28,9 +27,7 @@ public:
     lms::ReadDataChannel<Mavlink::Data> mavlinkChannel;
     double lastTimeStamp, currentXPosition, lastValidMeasurement;
 
-    //debug
-    double maxGrad = 0;
-    std::ofstream myfile;
+
 
 };
 

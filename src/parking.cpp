@@ -4,8 +4,7 @@
 
 bool Parking::initialize() {
 
-    logger.debug("init") << "init1";
-
+    cycleCounter = 0;
 
     currentState = ParkingState::SEARCHING;
     firstCircleArc = true;
@@ -44,8 +43,11 @@ bool Parking::cycle() {
 
     case ParkingState::SEARCHING: {
 
-        ++counter;      
+        ++cycleCounter;
 
+        /*
+         *  get velocity from odometer to calculate current x positions
+         */
         double velocity = 0;
         int velCount = 0;
 
@@ -62,9 +64,13 @@ bool Parking::cycle() {
         }
         if (velCount > 0) velocity /= velCount; //average velocity in one timestep of the framework
 
+
+        /*
+         *  get distance measurements from lidar sensor
+         */
         for( const auto& msg : *mavlinkChannel )
         {
-            if (msg.msgid == MAVLINK_MSG_ID_PROXIMITY && counter > 5) {  //counter > 1 nur für debugging, da extrem viele messwerte in den ersten paar frames auftauchen
+            if (msg.msgid == MAVLINK_MSG_ID_PROXIMITY && cycleCounter > 5) {  //cycleCounter > 1 nur für debugging, da extrem viele messwerte in den ersten paar frames auftauchen
                 mavlink_proximity_t distanceMsg;
                 mavlink_msg_proximity_decode(&msg, &distanceMsg);
                 double distance = distanceMsg.distance;
@@ -83,22 +89,29 @@ bool Parking::cycle() {
                     lastTimeStamp = distanceMsg.timestamp; //update timestamp
                     xPosition.push_back(currentXPosition); //add x-position to the position vector
                 }
-                //myfile << currentXPosition << ", " << distance << std::endl;
             }
         }
-        //std::cout << std::endl;
 
+
+        /*
+         *  find big enough jumps (=beginning or end of parking space) in the distance measurement data
+         */
         int numEdges = 0;
 
-        Parking::findEdges(&distanceMeasurement, &xPosition, &edgePosition, &edgeType, &numEdges);
+        Parking::findEdges(&distanceMeasurement, &xPosition, &edgePosition, &edgeType, &numEdges); //find the x-location of big enough "jumps" in distance measurements
 
-        logger.debug("parking") << edgePosition.at(0) << ", " << edgePosition.at(1) << ", " << edgePosition.at(2) << ", " << edgePosition.at(3) << ", " << edgePosition.at(4)<< ", " << edgePosition.at(5);
-        logger.debug("parking") << edgeType.at(0) << ", " << edgeType.at(1) << ", " << edgeType.at(2) << ", " << edgeType.at(3) << ", " << edgeType.at(4)<< ", " << edgeType.at(5);
+        if (edgePosition.size()>5)
+        {
+            logger.debug("parking") << edgePosition.at(0) << ", " << edgePosition.at(1) << ", " << edgePosition.at(2) << ", " << edgePosition.at(3) << ", " << edgePosition.at(4)<< ", " << edgePosition.at(5);
+            logger.debug("parking") << edgeType.at(0) << ", " << edgeType.at(1) << ", " << edgeType.at(2) << ", " << edgeType.at(3) << ", " << edgeType.at(4)<< ", " << edgeType.at(5);
+        }
 
-        //Logik zur Lückenerkennung
-        double startOfSpace = 0.0;
+
+        /*
+         *  logic for extracting a valid parking space from edge positions
+         */
         bool spaceStarted = false;
-        bool validSpaceDetected = false;
+        //bool validSpaceDetected = false;
         double size, startX, endX;
         for (int i=0; i < numEdges; ++i)
         {
@@ -112,7 +125,7 @@ bool Parking::cycle() {
                 size = edgePosition.at(i) - startX;
                 if (size >= config().get("minParkingSpaceSize", 0.50) && size <= config().get("maxParkingSpaceSize", 0.65))
                 {
-                    validSpaceDetected = true;
+                    //validSpaceDetected = true;
                     endX =  edgePosition.at(i);
                     //currentState = ParkingState::STOPPING;
                     logger.debug("praking") << "valid space: size=" << size << ", startX=" << startX << ", endX=" << endX;
@@ -209,43 +222,44 @@ bool Parking::cycle() {
     }
 
 
-
-
     return true;
 }
 
-
-
+/*
+ * input
+ * dst:             distance measurements from lidar sensor
+ * x:               corresponding x-position for each value in dst
+ *
+ * output
+ * edgePosition:    x-position of the "jumps" in distance measurements bigger than a threshold value
+ * edgeType:        1 => end of potential parking space (jump in positive y-direction); -1 => start of ...
+ * numEdges:        number of edges found
+ */
 void Parking::findEdges(std::vector<double> *dst, std::vector<double> *x, std::vector<double> *edgePosition, std::vector<double> *edgeType, int *numEdges)
 {
-
-    int res = 20;
+    uint res = config().get("resolutionGrob", 20); //skip 'res' values in first coarse search for edges
 
     if (dst->size() < 4*res) return;
 
-    double gradThreshGrob = 0.16;
+    double gradientThreshold = config().get("gradientThreshold", 0.16); //jumps bigger than 'gradientThreshold' [m] are treated as edges
 
-
-    int numEdge = 0;
-    int i, m;
+    uint numEdge = 0;
+    uint i, m;
     double grad, maxGrad;
 
     for(i=res; i < dst->size()-res; i += res)
     {
         grad = dst->at(i+res) - dst->at(i-res);
 
-        if (fabs(grad) > gradThreshGrob)
+        if (fabs(grad) > gradientThreshold)
         {
             maxGrad = 0.0;
             for (m=i-res+1; m<i+res-1; ++m)
             {
                 grad = dst->at(m+1) - dst->at(m-1);
-
-                if(fabs(grad) > fabs(maxGrad))
-                {
-                    maxGrad = grad;
-                }
+                maxGrad = fabs(grad) > fabs(maxGrad) ? grad : maxGrad;
             }
+
             if (edgePosition->size() < numEdge-1)
             {
                 edgePosition->push_back(x->at(m));
@@ -263,21 +277,5 @@ void Parking::findEdges(std::vector<double> *dst, std::vector<double> *x, std::v
     }
 
     *numEdges = numEdge;
-
-
 }
 
-
-double Parking::fakeLaserDistanceSensor() {
-
-    if (counter > 20 && counter <= 40){
-        return 60 + rand()%3;
-    }
-    else if (counter > 60 && counter <= 90){
-        return 50 + rand()%3;
-    }
-    else {
-        return 20 + rand()%3;
-    }
-
-}
