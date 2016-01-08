@@ -12,13 +12,14 @@ public:
     bool deinitialize();
     bool cycle();
 
-    void findEdges(std::vector<double> *dst, std::vector<double> *x, std::vector<double> *edgePosition, std::vector<double> *edgeType, int *numEdges);
+    void findEdges();
 
     int cycleCounter;
     std::vector<double> distanceMeasurement;
     std::vector<double> xPosition;
     std::vector<double> edgePosition;
-    std::vector<double> edgeType;
+    std::vector<int> edgeType;
+    uint numEdges;
     enum class ParkingState {SEARCHING, STOPPING, ENTERING, CORRECTING, FINISHED};
     ParkingState currentState;
     double ps_x_start, ps_x_end, y0, x0, drivenArcLength, parkingSpaceSize;

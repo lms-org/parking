@@ -5,6 +5,7 @@
 bool Parking::initialize() {
 
     cycleCounter = 0;
+    numEdges = 0;
 
     currentState = ParkingState::SEARCHING;
     firstCircleArc = true;
@@ -37,13 +38,13 @@ bool Parking::cycle() {
         return true;
     }*/
 
+    ++cycleCounter;
+
     //usleep(3000);
 
     switch (currentState) {
 
     case ParkingState::SEARCHING: {
-
-        ++cycleCounter;
 
         /*
          *  get velocity from odometer to calculate current x positions
@@ -95,23 +96,29 @@ bool Parking::cycle() {
 
         /*
          *  find big enough jumps (=beginning or end of parking space) in the distance measurement data
+         */        
+
+        /*
+         * output
+         * uint numEdges:               number of edges found
+         * vector<double> edgePosition: x-positions of edge
+         * vector<int> edgePosition:    type of edge (+1 or -1)
          */
-        int numEdges = 0;
+        Parking::findEdges(); //find the x-location of big enough "jumps" in distance measurements
 
-        Parking::findEdges(&distanceMeasurement, &xPosition, &edgePosition, &edgeType, &numEdges); //find the x-location of big enough "jumps" in distance measurements
-
-        if (edgePosition.size()>5)
+        std::ostringstream s;
+        for (uint i=0; i < numEdges; ++i)
         {
-            logger.debug("parking") << edgePosition.at(0) << ", " << edgePosition.at(1) << ", " << edgePosition.at(2) << ", " << edgePosition.at(3) << ", " << edgePosition.at(4)<< ", " << edgePosition.at(5);
-            logger.debug("parking") << edgeType.at(0) << ", " << edgeType.at(1) << ", " << edgeType.at(2) << ", " << edgeType.at(3) << ", " << edgeType.at(4)<< ", " << edgeType.at(5);
+            s << edgePosition.at(i);
+            s << ", ";
         }
+        logger.debug("edgePositions") << s.str();
 
 
         /*
          *  logic for extracting a valid parking space from edge positions
          */
         bool spaceStarted = false;
-        //bool validSpaceDetected = false;
         double size, startX, endX;
         for (int i=0; i < numEdges; ++i)
         {
@@ -124,13 +131,14 @@ bool Parking::cycle() {
             {
                 size = edgePosition.at(i) - startX;
                 if (size >= config().get("minParkingSpaceSize", 0.50) && size <= config().get("maxParkingSpaceSize", 0.65))
-                {
-                    //validSpaceDetected = true;
+                {                    
                     endX =  edgePosition.at(i);
+                    parkingSpaceSize = size;
                     //currentState = ParkingState::STOPPING;
                     logger.debug("praking") << "valid space: size=" << size << ", startX=" << startX << ", endX=" << endX;
                     break;
                 }
+                else spaceStarted = false;
             }
         }
 
@@ -167,43 +175,48 @@ bool Parking::cycle() {
         /*
          * Bessere Methode mit 2 Kreisboegen
          */
-        double y0 = 0.2;  //TODO: distance from second box to right side of car
+        double y0 = 0.23;  //TODO: distance from second box to right side of car
         double lr = config().get("wheelbase", 0.21); //Radstand
         double l = config().get("carLength", 0.32);  //Fahrzeuglänge
         double b = config().get("carWidth", 0.2); //Fahrzeugbreite
-        double delta_max = config().get("maxSteeringAngle", 24)*M_PI/180; //maximum steering angle
+        double delta_max = config().get("maxSteeringAngleDegrees", 24)*M_PI/180; //maximum steering angle
+
         double r = lr/2*tan(M_PI/2 - delta_max); //Radius des Wendekreises bei Volleinschlag beider Achsen
 
-        double k = config().get("k", 0.05);
-        double d = config().get("d", 0.03);
+        double k = config().get("k", 0.05); //Sicherheitsabstand zur Ecke der 2. Box
+        double d = config().get("d", 0.03); //Sicherheitsabstand zur 1. Box im eingeparkten Zustand
 
         double R = sqrt(l*l/4 + (r+b/2)*(r+b/2)); //Radius den das äußerste Eck des Fahrzeugs bei volleingeschlagenen Rädern zurücklegt
         double s = sqrt((R+k)*(R+k) - (parkingSpaceSize - d - l/2)*(parkingSpaceSize - d - l/2));
         double alpha = acos((r-y0+s)/(2*r)); //Winkel (in rad) der 2 Kreisboegen, die zum einfahren genutzt werden
         double x0 = d + l/2 + 2*r*sin(alpha) - parkingSpaceSize; //Abstand vom Ende der 2. Box zur Mitte des Fahrzeugs bei Lenkbeginn (Anfang erster Kreisbogen)
 
-        double d_mid2lidar = config().get("distanceMid2Lidar", 0.04); //Abstand von Fahrzeugmitte zur Lidar
+        double d_mid2lidar = config().get("distanceMid2Lidar", 0.1); //Abstand von Fahrzeugmitte zum Lidar
         double x_begin_steering = x0 - d_mid2lidar;
+
+        logger.debug("x_begin_steering") << x_begin_steering;
 
         double x_now = 0; //TODO: Momentante x-Position entlang der Straße (ausgehend vom Parkbeginn x=0)
         if (x_now <= x_begin_steering) {
+            drivenArcLength += 0; //TODO: Distanzschritt vom Hall Sensor;
+
              if (firstCircleArc) {
-                 //-> set servos to max steering angle
-                 drivenArcLength += 0; //Distanzschritt vom Hall/Drehgeber;
+                 //-> set servos to max steering angle                 
                  if (drivenArcLength >= alpha) {
                      firstCircleArc = false;
                      drivenArcLength = 0;
                  }
              }
              else {
-                 //-> set servos to max steering angle in other direction
-                 drivenArcLength += 0; //Distanzschritt vom Hall/Drehgeber;
+                 //-> set servos to max steering angle in other direction                 
                  if (drivenArcLength >= alpha) {
                      currentState = ParkingState::CORRECTING;
                  }
              }
         }
-        else {} // -> drive straight backwards still
+        else {
+            // -> drive straight backwards
+        }
 
 
 
@@ -235,8 +248,11 @@ bool Parking::cycle() {
  * edgeType:        1 => end of potential parking space (jump in positive y-direction); -1 => start of ...
  * numEdges:        number of edges found
  */
-void Parking::findEdges(std::vector<double> *dst, std::vector<double> *x, std::vector<double> *edgePosition, std::vector<double> *edgeType, int *numEdges)
+void Parking::findEdges()
 {
+    std::vector<double> *dst = &distanceMeasurement;
+    std::vector<double> *x = &xPosition;
+
     uint res = config().get("resolutionGrob", 20); //skip 'res' values in first coarse search for edges
 
     if (dst->size() < 4*res) return;
@@ -260,15 +276,15 @@ void Parking::findEdges(std::vector<double> *dst, std::vector<double> *x, std::v
                 maxGrad = fabs(grad) > fabs(maxGrad) ? grad : maxGrad;
             }
 
-            if (edgePosition->size() < numEdge-1)
+            if (edgePosition.size() <= numEdge)
             {
-                edgePosition->push_back(x->at(m));
-                edgeType->push_back(maxGrad > 0 ? -1 : 1);
+                edgePosition.push_back(x->at(m));
+                edgeType.push_back(maxGrad > 0 ? -1 : 1);
             }
             else
             {
-                edgePosition->at(numEdge) = x->at(m);
-                edgeType->at(numEdge) = maxGrad > 0 ? -1 : 1;
+                edgePosition.at(numEdge) = x->at(m);
+                edgeType.at(numEdge) = maxGrad > 0 ? -1 : 1;
             }
 
             ++numEdge;
@@ -276,6 +292,6 @@ void Parking::findEdges(std::vector<double> *dst, std::vector<double> *x, std::v
         }
     }
 
-    *numEdges = numEdge;
+    numEdges = numEdge;
 }
 
