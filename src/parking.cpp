@@ -17,8 +17,8 @@ bool Parking::initialize() {
     lastTimeStamp = -1;
     lastValidMeasurement = 0.5;
 
-    edgePosition.assign(100, 0);
-    edgeType.assign(100, 0);
+    //edgePosition.assign(100, 0);
+    //edgeType.assign(100, 0);
 
     //myfile.open ("data.csv");
 
@@ -246,8 +246,16 @@ void Parking::findEdges(std::vector<double> *dst, std::vector<double> *x, std::v
                     maxGrad = grad;
                 }
             }
-            edgePosition->at(numEdge) = x->at(m);
-            edgeType->at(numEdge) = maxGrad > 0 ? -1 : 1;
+            if (edgePosition->size() < numEdge-1)
+            {
+                edgePosition->push_back(x->at(m));
+                edgeType->push_back(maxGrad > 0 ? -1 : 1);
+            }
+            else
+            {
+                edgePosition->at(numEdge) = x->at(m);
+                edgeType->at(numEdge) = maxGrad > 0 ? -1 : 1;
+            }
 
             ++numEdge;
             i += res;
