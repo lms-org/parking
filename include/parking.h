@@ -6,6 +6,7 @@
 #include <mavlink/lms/data.h>
 #include <mavlink/CC2016/mavlink.h>
 #include <fstream>
+#include "sensor_utils/car.h"
 
 class Parking : public lms::Module {
 public:
@@ -30,6 +31,11 @@ public:
     double lastTimeStamp, currentXPosition, lastValidMeasurement;
 
     std::ofstream myfile;
+    double lastVelocity;
+    double startX, endX;
+
+    lms::WriteDataChannel<sensor_utils::Car> car;
+    sensor_utils::Car::State state;
 
 };
 
