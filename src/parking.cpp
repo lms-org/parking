@@ -20,7 +20,7 @@ bool Parking::initialize() {
     //edgePosition.assign(100, 0);
     //edgeType.assign(100, 0);
 
-    //myfile.open ("data.csv");
+    //myfile.open ("parkingData.csv");
 
     return true;
 }
@@ -40,7 +40,7 @@ bool Parking::cycle() {
 
     ++cycleCounter;
 
-    //usleep(3000);
+    //usleep(10000);
 
     switch (currentState) {
 
@@ -65,6 +65,8 @@ bool Parking::cycle() {
         }
         if (velCount > 0) velocity /= velCount; //average velocity in one timestep of the framework
 
+        //HACK wegen Hallsensor Ausfall:
+        velocity *= 3;
 
         /*
          *  get distance measurements from lidar sensor
@@ -75,10 +77,11 @@ bool Parking::cycle() {
                 mavlink_proximity_t distanceMsg;
                 mavlink_msg_proximity_decode(&msg, &distanceMsg);
                 double distance = distanceMsg.distance;
-                if (distance > 0.5) distance = 0.5;
-                if (distance < 0.09) distance = lastValidMeasurement;
+                if (distance > 0.5) distance = 0.5; //limit max distance
+                if (distance < 0.09) distance = lastValidMeasurement; //ignore measurements < 9 cm (artifacts)
 
                 distanceMeasurement.push_back(distance); //add the measurement to the distance vector
+                logger.debug("lidar measurement") << distance;
                 lastValidMeasurement = distance;
 
                 if (lastTimeStamp < 0) {
@@ -93,6 +96,7 @@ bool Parking::cycle() {
             }
         }
 
+        //if (xPosition.size() > 0) myfile << xPosition.at(xPosition.size()-1) << "," << distanceMeasurement.at(distanceMeasurement.size()-1) << std::endl;
 
         /*
          *  find big enough jumps (=beginning or end of parking space) in the distance measurement data
@@ -112,7 +116,7 @@ bool Parking::cycle() {
             s << edgePosition.at(i);
             s << ", ";
         }
-        logger.debug("edgePositions") << s.str();
+        //logger.debug("edgePositions") << s.str();
 
 
         /*

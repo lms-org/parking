@@ -5,6 +5,7 @@
 #include <cmath>
 #include <mavlink/lms/data.h>
 #include <mavlink/CC2016/mavlink.h>
+#include <fstream>
 
 class Parking : public lms::Module {
 public:
@@ -28,7 +29,7 @@ public:
     lms::ReadDataChannel<Mavlink::Data> mavlinkChannel;
     double lastTimeStamp, currentXPosition, lastValidMeasurement;
 
-
+    std::ofstream myfile;
 
 };
 
