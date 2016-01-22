@@ -20,6 +20,9 @@ public:
 
     void findEdges();
     void fitLine(std::vector<double> *iX, std::vector<double> *iY, double *oM, double *oB);
+    bool findValidParkingSpace(double sizeMin, double sizeMax);
+    void setSteeringAngles(double y_soll, double phi_soll, int drivingMode);
+    void setSteeringAngles(double y_soll, double phi_soll, double y_ist, double phi_ist, int drivingMode);
 
     int cycleCounter;
     std::vector<double> distanceMeasurement;
@@ -27,13 +30,15 @@ public:
     std::vector<double> edgePosition;
     std::vector<int> edgeType;
     uint numEdges;
-    enum class ParkingState {SEARCHING, STOPPING, ENTERING, CORRECTING, FINISHED};
+    enum DrivingMode {FORWARD, BACKWARDS};
+    enum ParkingState {SEARCHING, STOPPING, ENTERING, BACKING_UP, CORRECTING, FINISHED};
     ParkingState currentState;
     double ps_x_start, ps_x_end, y0, x0, parkingSpaceSize;
     bool firstCircleArc; //true: Fahrzeug befindet sich im ersten Kreisbogen
 
     lms::ReadDataChannel<Mavlink::Data> mavlinkChannel;
     double lastTimeStamp, lastImuTimeStamp, currentXPosition, lastValidMeasurement;
+    lms::Time tSpaceWasFound;
 
     std::ofstream myfile;
     double startX, endX;
