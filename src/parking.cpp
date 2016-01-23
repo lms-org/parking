@@ -23,17 +23,14 @@ bool Parking::initialize() {
 
     mavlinkChannel = readChannel<Mavlink::Data>("MAVLINK_IN");
     sensors = readChannel<sensor_utils::SensorContainer>("SENSORS");
+    car = writeChannel<sensor_utils::Car>("CAR");
+
     currentXPosition = 0;
     lastTimeStamp = -1;
     lastImuTimeStamp = -1;
     lastValidMeasurement = 0.5;
 
-    car = writeChannel<sensor_utils::Car>("CAR");
-
-    //edgePosition.assign(100, 0);
-    //edgeType.assign(100, 0);
-
-    myfile.open ("parkingData.csv");
+    //myfile.open ("parkingData.csv");
 
     return true;
 }
@@ -359,7 +356,7 @@ void Parking::updateXPosition(bool adjustVectors, bool useHallDistanceDirectly)
                 lastTimeStamp = distanceMsg.timestamp; //update timestamp
                 if (adjustVectors) xPosition.push_back(currentXPosition); //add x-position to the position vector
 
-                myfile << currentXPosition << "," << distance << "," << car_velocity << std::endl;
+                //myfile << currentXPosition << "," << distance << "," << car_velocity << std::endl;
             }
         }
     }
