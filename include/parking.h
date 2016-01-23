@@ -10,6 +10,8 @@
 #include "local_course/local_course.h"
 #include "street_environment/road.h"
 #include "street_environment/street_environment.h"
+#include <sensor_utils/sensor.h>
+#include <sensor_utils/odometer.h>
 
 
 class Parking : public lms::Module {
@@ -23,6 +25,8 @@ public:
     bool findValidParkingSpace(double sizeMin, double sizeMax);
     void setSteeringAngles(double y_soll, double phi_soll, int drivingMode);
     void setSteeringAngles(double y_soll, double phi_soll, double y_ist, double phi_ist, int drivingMode);
+
+    lms::ReadDataChannel<sensor_utils::SensorContainer> sensors;
 
     int cycleCounter;
     std::vector<double> distanceMeasurement;
@@ -41,7 +45,7 @@ public:
     lms::Time tSpaceWasFound;
 
     std::ofstream myfile;
-    double startX, endX;
+    double startX, endX, y0_dynamic, ind_end;
 
     lms::WriteDataChannel<sensor_utils::Car> car;
     sensor_utils::Car::State state;
