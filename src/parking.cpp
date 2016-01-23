@@ -236,8 +236,9 @@ bool Parking::cycle() {
 
         updateXPosition(false);
 
-        if (currentXPosition < config().get("correctingDistance"), 0.04)  state.targetSpeed = config().get("velocityCorrecting", 0.5);
-        else {
+        if (currentXPosition < config().get<float>("correctingDistance", 0.04)){
+            state.targetSpeed = config().get<float>("velocityCorrecting", 0.5);
+        }else {
             state.targetSpeed = 0.0;
             state.steering_front = 0.0;
             state.steering_rear = 0.0;
