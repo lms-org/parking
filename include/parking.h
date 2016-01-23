@@ -54,7 +54,7 @@ public:
     double velocity_temp;
 
     void updateYawAngle();
-    void updateXPosition(bool adjustVectors);
+    void updateXPosition(bool adjustVectors, bool useHallDistanceDirectly);
     void updateVelocity();
 };
 
