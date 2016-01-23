@@ -25,6 +25,7 @@ public:
     bool findValidParkingSpace(double sizeMin, double sizeMax);
     void setSteeringAngles(double y_soll, double phi_soll, int drivingMode);
     void setSteeringAngles(double y_soll, double phi_soll, double y_ist, double phi_ist, int drivingMode);
+    double getDistanceToMiddleLane();
 
     lms::ReadDataChannel<sensor_utils::SensorContainer> sensors;
 
