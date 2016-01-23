@@ -21,7 +21,7 @@ public:
     bool cycle();
 
     void updateYawAngle();
-    void updateXPosition(bool adjustVectors);
+    void updateXPosition(bool adjustVectors, bool useHallDistanceDirectly);
     void updateVelocity();
 
     void findEdges();
@@ -53,13 +53,8 @@ public:
     double car_yawAngle, car_velocity, car_xPosition;
     double yawAngleStartEntering;
 
-<<<<<<< HEAD
-    std::ofstream myfile;
-=======
-    void updateYawAngle();
-    void updateXPosition(bool adjustVectors, bool useHallDistanceDirectly);
-    void updateVelocity();
->>>>>>> neu2
+    std::ofstream myfile;    
+
 };
 
 #endif // PARKING_H
