@@ -83,7 +83,7 @@ bool Parking::cycle() {
          ***************************************************/
 
         //update current x-position, distance measurement vector and x-position vector
-        updateXPosition(true);
+        updateXPosition(true, false); //true, false
 
         //find the x-positions of big enough "jumps" in distance measurements
         Parking::findEdges();
@@ -113,7 +113,7 @@ bool Parking::cycle() {
         setSteeringAngles(-0.2, 0.0, DrivingMode::FORWARD);
 
         //update current x-position
-        updateXPosition(true);
+        updateXPosition(true, true);
 
         //set target speed as if the car was decelerating constantly
         if (config().get<float>("decelerationStopping", 3.0)) {
@@ -126,10 +126,12 @@ bool Parking::cycle() {
 
         car->putState(state);
 
-        int num_y_vals = config().get<float>("numberOfY0measurements", 20);
-        if (car->velocity() < config().get<float>("minVelocityBeforeDrivingBackwards", 0.4)) {
+        int num_y_vals = config().get("numberOfY0measurements", 20);
+        if (car->velocity() < config().get("minVelocityBeforeDrivingBackwards", 0.4)) {
 
-            if (distanceMeasurement.size() > ind_end + num_y_vals && config().get<bool>("useYmeasurementOfSecondBox", false)) {
+            //find median of distance measurements taken shortly after detecting the second box --> y0
+            if (distanceMeasurement.size() > ind_end + num_y_vals && config().get<bool>("useYmeasurementOfSecondBox", false))
+            {
                 std::nth_element(distanceMeasurement.begin() + ind_end, distanceMeasurement.begin() + ind_end + num_y_vals/2, distanceMeasurement.begin() + ind_end + num_y_vals);
                 double median = distanceMeasurement.at(ind_end + num_y_vals/2);
                 y0_dynamic = median - 0.06 + config().get<float>("distanceMidLidarY", 0.08); //0.06 lidar offset, 0.08 from lidar to middle of car
@@ -146,7 +148,7 @@ bool Parking::cycle() {
     {
         logger.info("ENTERING");
 
-        updateXPosition(false);
+        updateXPosition(false, true);
 
         state.targetSpeed = -config().get<float>("velocityEntering", 0.5);
 
@@ -223,7 +225,7 @@ bool Parking::cycle() {
         double phi_ist = car_yawAngle - yawAngleStartEntering;
         setSteeringAngles(-0.3, 0.0, 0.0, phi_ist, DrivingMode::FORWARD);
 
-        updateXPosition(false);
+        updateXPosition(false, true);
 
         if (getDistanceToMiddleLane() >= 58) {
             currentState = ParkingState::FINISHED;
@@ -330,9 +332,9 @@ void Parking::findEdges()
     }
 }
 
-void Parking::updateXPosition(bool adjustVectors)
+void Parking::updateXPosition(bool adjustVectors, bool useHallDistanceDirectly)
 {
-    if (true) {
+
     for( const auto& msg : *mavlinkChannel)
     {
 
@@ -353,21 +355,25 @@ void Parking::updateXPosition(bool adjustVectors)
                 lastTimeStamp = distanceMsg.timestamp;
             }
             else {
-                currentXPosition += car_velocity*(distanceMsg.timestamp - lastTimeStamp)/1000000.0; //update x-position (timestamp is in us)
+                if (!useHallDistanceDirectly) currentXPosition += car_velocity*(distanceMsg.timestamp - lastTimeStamp)/1000000.0; //update x-position (timestamp is in us)
                 lastTimeStamp = distanceMsg.timestamp; //update timestamp
                 if (adjustVectors) xPosition.push_back(currentXPosition); //add x-position to the position vector
 
                 myfile << currentXPosition << "," << distance << "," << car_velocity << std::endl;
             }
         }
+    }
+
+    if (useHallDistanceDirectly)
+    {
+        if(sensors->hasSensor("HALL")) {
+            auto hall = sensors->sensor<sensor_utils::Odometer>("HALL");
+            auto dst = hall->distance.x();
+            currentXPosition += dst*3; //TODO warum *3 ??
+            logger.debug("currentXPosition") << currentXPosition;
         }
-
     }
-    else  {       
-        currentXPosition += car->movedDistance()*(car->velocity() > 0 ? 1 : -1);
-        logger.debug("currentXPosition") << currentXPosition;
 
-    }
     //if (distanceMeasurement.size() > 0) logger.debug("lidar measurement") << distanceMeasurement.at(distanceMeasurement.size()-1);
 }
 
