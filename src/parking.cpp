@@ -64,6 +64,7 @@ bool Parking::cycle() {
 
     case ParkingState::SEARCHING:
     {
+        logger.info("SEARCHING");
 
          /***************************************************
          * drive straight along the middle of the right lane
@@ -102,7 +103,6 @@ bool Parking::cycle() {
 
     case ParkingState::STOPPING:
     {
-
         logger.info("STOPPING");
 
         /***************************************************
@@ -116,8 +116,14 @@ bool Parking::cycle() {
         updateXPosition(true);
 
         //set target speed as if the car was decelerating constantly
-        //state.targetSpeed = config().get("velocitySearching", 1.0) - tSpaceWasFound.since().toFloat()*config().get("decelerationStopping", 3);
-        state.targetSpeed = 0.0;
+        if (config().get<float>("decelerationStopping", 3.0)) {
+            state.targetSpeed = config().get("velocitySearching", 1.0) - timeSpaceWasFound.since().toFloat()*config().get<float>("decelerationStopping", 3.0);
+        }
+        else
+        {
+            state.targetSpeed = 0.0;
+        }
+
         car->putState(state);
 
         int num_y_vals = config().get<float>("numberOfY0measurements", 20);
@@ -138,7 +144,6 @@ bool Parking::cycle() {
 
     case ParkingState::ENTERING:
     {
-
         logger.info("ENTERING");
 
         updateXPosition(false);
@@ -210,7 +215,10 @@ bool Parking::cycle() {
         break;
 
     }
-    case ParkingState::CORRECTING: {
+    case ParkingState::CORRECTING:
+    {
+        logger.info("SEARCHING");
+
         //set target state such that orientation (phi) is kept near 0 and y gets controlled by nearly the full steering angle
         double phi_ist = car_yawAngle - yawAngleStartEntering;
         setSteeringAngles(-0.3, 0.0, 0.0, phi_ist, DrivingMode::FORWARD);
@@ -221,7 +229,8 @@ bool Parking::cycle() {
             currentState = ParkingState::FINISHED;
         }
 
-        if (currentXPosition < config().get<float>("correctingDistance", 0.04)){
+        if (currentXPosition < config().get<float>("correctingDistance", 0.04))
+        {
             state.targetSpeed = config().get<float>("velocityCorrecting", 0.5);
         }
         else
