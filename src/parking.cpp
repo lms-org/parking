@@ -71,7 +71,7 @@ bool Parking::cycle() {
          ***************************************************/
 
         //the desired state is such that phi=0 (straight driving) and y=0.2 (middle of right lane) with respect to the middle lane        
-        setSteeringAngles(0.2, 0.0, DrivingMode::FORWARD);
+        setSteeringAngles(-0.2, 0.0, DrivingMode::FORWARD);
 
         //set velocity and send state to car
         state.targetSpeed = config().get<float>("velocitySearching", 1.0);
