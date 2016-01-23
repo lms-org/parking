@@ -98,7 +98,7 @@ bool Parking::cycle() {
         if (spaceFound)
         {
             logger.info("valid parking space") << "size=" << parkingSpaceSize << ", startX=" << startX << ", endX=" << endX;
-            tSpaceWasFound = lms::Time::now();
+            timeSpaceWasFound = lms::Time::now();
             currentState = ParkingState::STOPPING;
         }
 
@@ -141,13 +141,7 @@ bool Parking::cycle() {
         break;
 
     }
-    /*case ParkingState::BACKING_UP:
-    {
-        //drive backwards straight
-        setSteeringAngles(0.2, 0.0, DrivingMode::BACKWARDS);
 
-        break;
-    }*/
     case ParkingState::ENTERING:
     {
 
@@ -158,6 +152,10 @@ bool Parking::cycle() {
         state.targetSpeed = -config().get<float>("velocityEntering", 0.5);
 
         double y0 = y0_dynamic;
+
+        /***************************************************
+        * calculate parameters for entering maneuver
+        ***************************************************/
 
         double lr = config().get<float>("wheelbase", 0.21); //Radstand
         double l = config().get<float>("carLength", 0.32);  //Fahrzeuglänge
@@ -177,8 +175,6 @@ bool Parking::cycle() {
 
         double d_mid2lidar = config().get<float>("distanceMidLidarX", 0.09); //Abstand von Fahrzeugmitte zum Lidar
         double x_begin_steering = config().get<float>("xDistanceCorrection",0.09) + endX + x0 - d_mid2lidar;
-
-
 
         logger.debug("params") << "x0=" << x0 << ", y0=" << y0_dynamic << ", size=" << parkingSpaceSize << ", endX=" << endX << ", currentX=" << currentXPosition;
 
@@ -216,16 +212,11 @@ bool Parking::cycle() {
                  }
              }
 
-
         }
-        else
-        {
-            //drive straight backwards
-            setSteeringAngles(0.2, 0.0, DrivingMode::BACKWARDS);
-
+        else //drive straight backwards
+        {            
+            setSteeringAngles(-0.2, 0.0, DrivingMode::BACKWARDS);
         }
-
-
         break;
 
     }
@@ -240,7 +231,6 @@ bool Parking::cycle() {
             currentState = ParkingState::FINISHED;
         }
 
-
         if (currentXPosition < config().get<float>("correctingDistance", 0.04)){
             state.targetSpeed = config().get<float>("velocityCorrecting", 0.5);
         }
@@ -251,14 +241,13 @@ bool Parking::cycle() {
             state.steering_rear = 0.0;
         }
 
-
-
-
     }
     case ParkingState::FINISHED: {
         state.targetSpeed = 0.0;
         state.steering_front = 0.0;
         state.steering_rear = 0.0;
+
+        //TODO flash lights :)
     }
 
     }
@@ -367,19 +356,13 @@ void Parking::updateXPosition(bool adjustVectors)
                 lastTimeStamp = distanceMsg.timestamp; //update timestamp
                 if (adjustVectors) xPosition.push_back(currentXPosition); //add x-position to the position vector
 
-                myfile << currentXPosition << "," << distance << "," << car_velocity << "," << velocity_temp << std::endl;
+                myfile << currentXPosition << "," << distance << "," << car_velocity << std::endl;
             }
         }
         }
 
     }
-    else  {
-        /*if(sensors->hasSensor("HALL")) {
-            auto hall = sensors->sensor<sensor_utils::Odometer>("HALL");
-            auto dst = hall->distance.x();
-            currentXPosition += dst;
-            logger.debug("currentXPosition") << currentXPosition;
-        }*/
+    else  {       
         currentXPosition += car->movedDistance()*(car->velocity() > 0 ? 1 : -1);
         logger.debug("currentXPosition") << currentXPosition;
 
@@ -418,9 +401,20 @@ void Parking::updateVelocity()
     */
 }
 
-void Parking::fitLine(std::vector<double> *iX, std::vector<double> *iY, double *oM, double *oB)
+void Parking::fitLineToMiddleLane(double *oM, double *oB)
 {
-    if (iX->size() != iY->size())
+    //get points from middle lane
+    street_environment::RoadLane middleLane = getService<local_course::LocalCourse>("LOCAL_COURSE_SERVICE")->getCourse();
+    std::vector<double> iX;
+    std::vector<double> iY;
+
+    for (uint i=config().get<int>("lineFitStartPoint", 2); i<=config().get<int>("lineFitEndPoint", 5); ++i) //get points 1 to 4
+    {
+        iX.push_back(middleLane.points().at(i).x);
+        iY.push_back(middleLane.points().at(i).y);
+    }
+
+    if (iX.size() != iY.size())
     {
         *oM = 0.0;
         *oB = 0.0;
@@ -428,19 +422,19 @@ void Parking::fitLine(std::vector<double> *iX, std::vector<double> *iY, double *
     }
 
     double xMean = 0.0, yMean = 0.0;
-    for (uint i=0; i < iX->size(); ++i)
+    for (uint i=0; i < iX.size(); ++i)
     {
-        xMean += iX->at(i);
-        yMean += iY->at(i);
+        xMean += iX.at(i);
+        yMean += iY.at(i);
     }
-    xMean /= iX->size();
-    yMean /= iX->size();
+    xMean /= iX.size();
+    yMean /= iX.size();
 
     double nom = 0.0, den = 0.0;
-    for (uint i=0; i < iX->size(); ++i)
+    for (uint i=0; i < iX.size(); ++i)
     {
-        nom += (iX->at(i)-xMean)*(iY->at(i)-yMean);
-        den += (iX->at(i)-xMean)*(iX->at(i)-xMean);
+        nom += (iX.at(i)-xMean)*(iY.at(i)-yMean);
+        den += (iX.at(i)-xMean)*(iX.at(i)-xMean);
     }
 
     // regression line: y = m*x + b
@@ -488,20 +482,9 @@ void Parking::setSteeringAngles(double y_soll, double phi_soll, int drivingMode)
     double R_backwards[] = {-0.100, 0.979, -0.100, 1.000};
     double F_backwards[] = {2.000, 0.420, 2.000, 0.000};
 
-    //get some points from middle lane
-    street_environment::RoadLane middleLane = getService<local_course::LocalCourse>("LOCAL_COURSE_SERVICE")->getCourse();
-    std::vector<double> xMiddle;
-    std::vector<double> yMiddle;
-
-    for (uint i=2; i<=5; ++i) //get points 1 to 4
-    {
-        xMiddle.push_back(middleLane.points().at(i).x);
-        yMiddle.push_back(middleLane.points().at(i).y);
-    }
-
     //find regression line y=mx+b through some points of the middle lane (not necessary but contributes to better stability in straight line performance)
     double m, b;
-    fitLine(&xMiddle, &yMiddle, &m, &b);
+    fitLineToMiddleLane(&m, &b);
 
     //the current vehicle state is [y_ist; phi_ist]
     double y_ist = -b*cos(atan(m));
@@ -520,7 +503,7 @@ void Parking::setSteeringAngles(double y_soll, double phi_soll, int drivingMode)
         delta_h = F_backwards[2]*y_soll + F_backwards[3]*phi_soll - (R_backwards[2]*y_ist + R_backwards[3]*phi_ist);
     }
 
-    //set the desired steering angles and driving speed
+    //set the desired steering angles
     state.steering_front = delta_v;
     state.steering_rear = delta_h;
 
@@ -548,28 +531,16 @@ void Parking::setSteeringAngles(double y_soll, double phi_soll, double y_ist, do
         delta_h = F_backwards[2]*y_soll + F_backwards[3]*phi_soll - (R_backwards[2]*y_ist + R_backwards[3]*phi_ist);
     }
 
-    //set the desired steering angles and driving speed
+    //set the desired steering angles
     state.steering_front = delta_v;
     state.steering_rear = delta_h;
 
 }
 
 double Parking::getDistanceToMiddleLane()
-{
-    //get some points from middle lane
-    street_environment::RoadLane middleLane = getService<local_course::LocalCourse>("LOCAL_COURSE_SERVICE")->getCourse();
-    std::vector<double> xMiddle;
-    std::vector<double> yMiddle;
-
-    for (uint i=config().get<int>("lineFitStartPoint", 2); i<=config().get<int>("lineFitEndPoint", 5); ++i) //get points 1 to 4
-    {
-        xMiddle.push_back(middleLane.points().at(i).x);
-        yMiddle.push_back(middleLane.points().at(i).y);
-    }
-
-    //find regression line through some points of the middle lane (not necessary but contributes to better stability in straight line performance)
+{    
     double m, b;
-    fitLine(&xMiddle, &yMiddle, &m, &b);
+    fitLineToMiddleLane(&m, &b);
 
     return b;
 }
