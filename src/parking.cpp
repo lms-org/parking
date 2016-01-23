@@ -59,11 +59,6 @@ bool Parking::cycle() {
         updateVelocity();
     }
 
-    //------------DEBUG---------------------
-    //usleep(10000);
-    //currentState = ParkingState::SEARCHING;
-    //--------------------------------------
-
     switch (currentState)
     {
 
@@ -139,7 +134,6 @@ bool Parking::cycle() {
         }
 
         break;
-
     }
 
     case ParkingState::ENTERING:
@@ -160,21 +154,16 @@ bool Parking::cycle() {
         double lr = config().get<float>("wheelbase", 0.21); //Radstand
         double l = config().get<float>("carLength", 0.32);  //Fahrzeuglänge
         double b = config().get<float>("carWidth", 0.2); //Fahrzeugbreite
-        //double delta_max = config().get("maxSteeringAngleDegrees", 20)*M_PI/180; //maximum steering angle
-        double delta_max = 22*M_PI/180; //maximum steering angle
-
-        double r = lr/2*tan(M_PI/2 - delta_max); //Radius des Wendekreises (bezogen auf den Fahrzeugmittelpunkt) bei Volleinschlag beider Achsen
-
+        double delta_max = config().get("maxSteeringAngle", 22)*M_PI/180; //maximum steering angle
         double k = config().get<float>("k", 0.03); //Sicherheitsabstand zur Ecke der 2. Box
         double d = config().get<float>("d", 0.05); //Sicherheitsabstand zur 1. Box im eingeparkten Zustand
 
+        double r = lr/2*tan(M_PI/2 - delta_max); //Radius des Wendekreises (bezogen auf den Fahrzeugmittelpunkt) bei Volleinschlag beider Achsen
         double R = sqrt(l*l/4 + (r+b/2)*(r+b/2)); //Radius den das äußerste Eck des Fahrzeugs bei volleingeschlagenen Rädern zurücklegt
         double s = sqrt((R+k)*(R+k) - (parkingSpaceSize - d - l/2)*(parkingSpaceSize - d - l/2));
         double alpha = acos((r-y0+s)/(2*r)); //Winkel (in rad) der 2 Kreisboegen, die zum einfahren genutzt werden
-        double x0 = d + l/2 + 2*r*sin(alpha) - parkingSpaceSize; //Abstand vom Ende der 2. Box zur Mitte des Fahrzeugs bei Lenkbeginn (Anfang erster Kreisbogen)
-
-        double d_mid2lidar = config().get<float>("distanceMidLidarX", 0.09); //Abstand von Fahrzeugmitte zum Lidar
-        double x_begin_steering = config().get<float>("xDistanceCorrection",0.09) + endX + x0 - d_mid2lidar;
+        double x0 = d + l/2 + 2*r*sin(alpha) - parkingSpaceSize; //Abstand vom Ende der 2. Box zur Mitte des Fahrzeugs bei Lenkbeginn (Anfang erster Kreisbogen)        
+        double x_begin_steering = config().get<float>("xDistanceCorrection",0.09) + endX + x0 - config().get<float>("distanceMidLidarX", 0.09);
 
         logger.debug("params") << "x0=" << x0 << ", y0=" << y0_dynamic << ", size=" << parkingSpaceSize << ", endX=" << endX << ", currentX=" << currentXPosition;
 
@@ -217,6 +206,7 @@ bool Parking::cycle() {
         {            
             setSteeringAngles(-0.2, 0.0, DrivingMode::BACKWARDS);
         }
+
         break;
 
     }
@@ -241,6 +231,7 @@ bool Parking::cycle() {
             state.steering_rear = 0.0;
         }
 
+        break;
     }
     case ParkingState::FINISHED: {
         state.targetSpeed = 0.0;
@@ -248,6 +239,7 @@ bool Parking::cycle() {
         state.steering_rear = 0.0;
 
         //TODO flash lights :)
+        break;
     }
 
     }
