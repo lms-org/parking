@@ -38,6 +38,8 @@ bool Parking::initialize() {
 bool Parking::deinitialize() {
     distanceMeasurement.clear();
     xPosition.clear();
+    edgePosition.clear();
+    edgeType.clear();
     return true;
 }
 
@@ -48,12 +50,18 @@ bool Parking::cycle() {
         return true;
     }*/
 
+    if(getService<phoenix_CC2016_service::Phoenix_CC2016Service>("PHOENIX_SERVICE")->rcStateChanged()){
+        deinitialize();
+        initialize();
+        logger.error("reset parking");
+    }
+
     ++cycleCounter;
 
     if (cycleCounter > 10)
     {
         updateYawAngle();
-        updateVelocity();
+        updateVelocity();       
     }
 
     switch (currentState)
@@ -70,9 +78,7 @@ bool Parking::cycle() {
         //the desired state is such that phi=0 (straight driving) and y=0.2 (middle of right lane) with respect to the middle lane        
         setSteeringAngles(-0.2, 0.0, DrivingMode::FORWARD);
 
-        //set velocity and send state to car
         state.targetSpeed = config().get<float>("velocitySearching", 1.0);
-        car->putState(state);
 
 
          /***************************************************
@@ -114,14 +120,12 @@ bool Parking::cycle() {
 
         //set target speed as if the car was decelerating constantly
         if (config().get<float>("decelerationStopping", 3.0)) {
-            state.targetSpeed = config().get("velocitySearching", 1.0) - timeSpaceWasFound.since().toFloat()*config().get<float>("decelerationStopping", 3.0);
+            state.targetSpeed = config().get<float>("velocitySearching", 1.0) - timeSpaceWasFound.since().toFloat()*config().get<float>("decelerationStopping", 3.0);
         }
         else
         {
             state.targetSpeed = 0.0;
         }
-
-        car->putState(state);
 
         int num_y_vals = config().get("numberOfY0measurements", 20);
         if (car->velocity() < config().get("minVelocityBeforeDrivingBackwards", 0.4)) {
@@ -133,7 +137,7 @@ bool Parking::cycle() {
                 double median = distanceMeasurement.at(ind_end + num_y_vals/2);
                 y0_dynamic = median - 0.06 + config().get<float>("distanceMidLidarY", 0.08); //0.06 lidar offset, 0.08 from lidar to middle of car
             }
-            else y0_dynamic = 0.25;
+            else y0_dynamic = config().get<float>("y0_worstCase", 0.23);
 
             currentState = ParkingState::ENTERING;
         }
@@ -208,7 +212,9 @@ bool Parking::cycle() {
         }
         else //drive straight backwards
         {            
-            setSteeringAngles(-0.2, 0.0, DrivingMode::BACKWARDS);
+            //setSteeringAngles(-0.2, 0.0, DrivingMode::BACKWARDS);
+            state.steering_front = 0.0;
+            state.steering_rear = 0.0;
         }
 
         break;
@@ -224,7 +230,7 @@ bool Parking::cycle() {
 
         updateXPosition(false, true);
 
-        if (getDistanceToMiddleLane() >= 58) {
+        if (getDistanceToMiddleLane() >= config().get<float>("stopCorrectingDistanceY", 0.62)) {
             currentState = ParkingState::FINISHED;
         }
 
@@ -252,6 +258,8 @@ bool Parking::cycle() {
 
     }
 
+    //logger.error("state") <<  "targetSpeed=" << state.targetSpeed << ", sf=" << state.steering_front << ", sr=" << state.steering_rear;
+
     car->putState(state);
     return true;
 }
@@ -268,10 +276,15 @@ bool Parking::cycle() {
  */
 void Parking::findEdges()
 {
-    std::vector<double> *dst = &distanceMeasurement;
-    std::vector<double> *x = &xPosition;
+    auto *dst = &distanceMeasurement;
+    auto *x = &xPosition;
 
-    uint res = config().get<float>("resolutionGrob", 10); //skip 'res' values in first coarse search for edges
+    /*formula for rough resolution: res = l*b_min/(v*s)
+    l: lidar measurements per second
+    b_min: minimum object width that has to be detected
+    v: velocity
+    s: safety factor*/
+    uint res = config().get<int>("lidarMeasurementsPerSecond", 300) * 0.15 / (config().get<float>("velocitySearching", 1.0) * 2.0);
 
     if (dst->size() < 4*res) return;
 
@@ -289,7 +302,7 @@ void Parking::findEdges()
         {
             maxGrad = 0.0;
             uint indMax = 0;
-            for (m=i-res+1; m<i+res-1; ++m)
+            for (m=i-res+1; m<i+res; ++m)
             {
                 grad = dst->at(m+1) - dst->at(m-1);
                 if (fabs(grad) > fabs(maxGrad))
@@ -316,8 +329,8 @@ void Parking::findEdges()
     }
     numEdges = numEdge;
 
-    //DEBUG print edge positions
-    if (true)
+    //DEBUG print edges
+    if (config().get<bool>("debugPrintEdges", false))
     {
         std::ostringstream s;
         for (uint i=0; i < numEdges; ++i)
@@ -326,6 +339,14 @@ void Parking::findEdges()
             s << ", ";
         }
         logger.debug("edgePositions") << s.str();
+
+        std::ostringstream s2;
+        for (uint i=0; i < numEdges; ++i)
+        {
+            s2 << edgeType.at(i);
+            s2 << ", ";
+        }
+        logger.debug("edgeTypes") << s2.str();
     }
 }
 
@@ -384,6 +405,10 @@ void Parking::updateYawAngle()
 void Parking::updateVelocity()
 {
     car_velocity = car->velocity();
+    /*if(sensors->hasSensor("HALL")) {
+        auto hall = sensors->sensor<sensor_utils::Odometer>("HALL");
+        car_velocity = hall->velocity.x();
+    }*/
     return;
 
     //old function using raw measurements
@@ -463,6 +488,8 @@ bool Parking::findValidParkingSpace(double sizeMin, double sizeMax)
         {
             size = edgePosition.at(i) - startX;
 
+            logger.error("size") <<size;
+
             if (size >= sizeMin && size <= sizeMax)
             {
                 endX =  edgePosition.at(i);
@@ -480,18 +507,18 @@ bool Parking::findValidParkingSpace(double sizeMin, double sizeMax)
 void Parking::setSteeringAngles(double y_soll, double phi_soll, int drivingMode)
 {
 
-    //eigenvalues [-2, -2]
-    double R_forward[] = {2.000, 1.420, 2.000, 1.000};
-    double F_forward[] = {2.000, 0.420, 2.000, 0.000};
-    double R_backwards[] = {-0.100, 0.979, -0.100, 1.000};
-    double F_backwards[] = {2.000, 0.420, 2.000, 0.000};
+    //eigenvalues [-3, -3]
+    double R_forward[] = {3.000, 1.630, 3.000, 1.000};
+    double F_forward[] = {3.000, 0.630, 3.000, 0.000};
+    double R_backwards[] = {-0.150, 0.969, -0.150, 1.000};
+    double F_backwards[] = {-0.150, -0.031, -0.150, 0.000};
 
     //find regression line y=mx+b through some points of the middle lane (not necessary but contributes to better stability in straight line performance)
     double m, b;
     fitLineToMiddleLane(&m, &b);
 
     //the current vehicle state is [y_ist; phi_ist]
-    double y_ist = -b*cos(atan(m));
+    double y_ist = -b*cos(-atan(m));
     double phi_ist = -atan(m);
 
     // define the controller gain R and the pre-filter F such that: u = [delta_v; delta_h] = F*[y_soll; phi_soll] - R*[y_ist; phi_ist]
@@ -516,11 +543,11 @@ void Parking::setSteeringAngles(double y_soll, double phi_soll, int drivingMode)
 void Parking::setSteeringAngles(double y_soll, double phi_soll, double y_ist, double phi_ist, int drivingMode)
 {
 
-    //eigenvalues [-2, -2]
-    double R_forward[] = {2.000, 1.420, 2.000, 1.000};
-    double F_forward[] = {2.000, 0.420, 2.000, 0.000};
-    double R_backwards[] = {-0.100, 0.979, -0.100, 1.000};
-    double F_backwards[] = {2.000, 0.420, 2.000, 0.000};
+    //eigenvalues [-3, -3]
+    double R_forward[] = {3.000, 1.630, 3.000, 1.000};
+    double F_forward[] = {3.000, 0.630, 3.000, 0.000};
+    double R_backwards[] = {-0.150, 0.969, -0.150, 1.000};
+    double F_backwards[] = {-0.150, -0.031, -0.150, 0.000};
 
     // define the controller gain R and the pre-filter F such that: u = [delta_v; delta_h] = F*[y_soll; phi_soll] - R*[y_ist; phi_ist]
     double delta_v, delta_h;
