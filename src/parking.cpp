@@ -13,6 +13,7 @@ bool Parking::initialize() {
     endX = 0.0;
     y0_dynamic = 0.0;
     ind_end = 0.0;
+    logThings = true;
 
     state.priority = 100;
     state.name = "PARKING";
@@ -155,6 +156,9 @@ bool Parking::cycle() {
 
         double y0 = y0_dynamic;
 
+        //TODO nicht fest
+        parkingSpaceSize = 0.55;
+
         /***************************************************
         * calculate parameters for entering maneuver
         ***************************************************/
@@ -166,14 +170,21 @@ bool Parking::cycle() {
         double k = config().get<float>("k", 0.03); //Sicherheitsabstand zur Ecke der 2. Box
         double d = config().get<float>("d", 0.05); //Sicherheitsabstand zur 1. Box im eingeparkten Zustand
 
-        double r = lr/2*tan(M_PI/2 - delta_max); //Radius des Wendekreises (bezogen auf den Fahrzeugmittelpunkt) bei Volleinschlag beider Achsen
+        //TODO delta_max + 1*pi/180;
+        double r = lr/2*tan(M_PI/2 - (delta_max-1*M_PI/180)); //Radius des Wendekreises (bezogen auf den Fahrzeugmittelpunkt) bei Volleinschlag beider Achsen
         double R = sqrt(l*l/4 + (r+b/2)*(r+b/2)); //Radius den das äußerste Eck des Fahrzeugs bei volleingeschlagenen Rädern zurücklegt
         double s = sqrt((R+k)*(R+k) - (parkingSpaceSize - d - l/2)*(parkingSpaceSize - d - l/2));
         double alpha = acos((r-y0+s)/(2*r)); //Winkel (in rad) der 2 Kreisboegen, die zum einfahren genutzt werden
         double x0 = d + l/2 + 2*r*sin(alpha) - parkingSpaceSize; //Abstand vom Ende der 2. Box zur Mitte des Fahrzeugs bei Lenkbeginn (Anfang erster Kreisbogen)        
         double x_begin_steering = config().get<float>("xDistanceCorrection",0.09) + endX + x0 - config().get<float>("distanceMidLidarX", 0.09);
 
-        logger.debug("params") << "x0=" << x0 << ", y0=" << y0_dynamic << ", size=" << parkingSpaceSize << ", endX=" << endX << ", currentX=" << currentXPosition;
+        if (logThings) {
+            logger.debug("params") << "x0=" << x0 << ", y0=" << y0_dynamic << ", size=" << parkingSpaceSize << ", endX=" << endX << ", x_begin_steering=" << x_begin_steering;
+        }
+        else
+        {
+            logThings = false;
+        }
 
         if (currentXPosition <= x_begin_steering) //begin steering into parking space
         {
@@ -199,10 +210,10 @@ bool Parking::cycle() {
 
                  logger.debug("secondCircleArc") << "alpha=" << alpha << ", drivenArc=" << drivenArc;
 
-                 if (drivenArc <= 0.0) {
+                 if (drivenArc <= 0.0 + config().get<float>("alphaOffset",0.0)) {
                      state.steering_front = 0.0; // * 180. / M_PI;
                      state.steering_rear = 0.0; // * 180. / M_PI;
-                     state.targetSpeed = 0.0;
+                     state.targetSpeed = 0.0; //config().get<float>("velocityCorrecting", 0.5);
 
                      currentXPosition = 0;
                      currentState = ParkingState::CORRECTING;
@@ -230,29 +241,33 @@ bool Parking::cycle() {
 
         updateXPosition(false, true);
 
-        if (getDistanceToMiddleLane() >= config().get<float>("stopCorrectingDistanceY", 0.62)) {
+        //use distance from middle lane
+        /*if (getDistanceToMiddleLane() >= config().get<float>("correctingDistanceMiddleLane", 0.62) && config().get<float>("correctingDistanceMiddleLane", 0.62)) {
             currentState = ParkingState::FINISHED;
-        }
+        }*/
 
-        if (currentXPosition < config().get<float>("correctingDistance", 0.04))
+        //use only fixed distance
+        if (currentXPosition < config().get<float>("correctingDistance", 0.05))
         {
             state.targetSpeed = config().get<float>("velocityCorrecting", 0.5);
         }
         else
         {
-            state.targetSpeed = 0.0;
-            state.steering_front = 0.0;
-            state.steering_rear = 0.0;
+            currentState = ParkingState::FINISHED;
         }
 
         break;
     }
     case ParkingState::FINISHED: {
+
+        logger.info("FINISHED");
+
         state.targetSpeed = 0.0;
         state.steering_front = 0.0;
         state.steering_rear = 0.0;
 
         //TODO flash lights :)
+
         break;
     }
 
@@ -284,7 +299,7 @@ void Parking::findEdges()
     b_min: minimum object width that has to be detected
     v: velocity
     s: safety factor*/
-    uint res = config().get<int>("lidarMeasurementsPerSecond", 300) * 0.15 / (config().get<float>("velocitySearching", 1.0) * 2.0);
+    uint res = config().get<int>("lidarMeasurementsPerSecond", 300) * 0.1 / (config().get<float>("velocitySearching", 1.0) * 2.0);
 
     if (dst->size() < 4*res) return;
 
@@ -387,7 +402,7 @@ void Parking::updateXPosition(bool adjustVectors, bool useHallDistanceDirectly)
         if(sensors->hasSensor("HALL")) {
             auto hall = sensors->sensor<sensor_utils::Odometer>("HALL");
             auto dst = hall->distance.x();
-            currentXPosition += dst*3; //TODO warum *3 ??
+            currentXPosition += dst;
             logger.debug("currentXPosition") << currentXPosition;
         }
     }

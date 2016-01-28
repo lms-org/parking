@@ -48,6 +48,7 @@ public:
     double parkingSpaceSize, lastTimeStamp, lastImuTimeStamp, currentXPosition, lastValidMeasurement;
     double startX, endX, y0_dynamic, ind_end;
     lms::Time timeSpaceWasFound;
+    bool logThings;
 
     sensor_utils::Car::State state;
     double car_yawAngle, car_velocity, car_xPosition;
