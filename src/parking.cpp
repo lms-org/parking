@@ -31,12 +31,13 @@ bool Parking::initialize() {
     lastImuTimeStamp = -1;
     lastValidMeasurement = 0.5;
 
-    //myfile.open ("parkingData.csv");
-
+    //myfile.open("parkingData.csv");
+    //myfile.open(saveLogDir("parking") + "/parkingData.csv" );
     return true;
 }
 
 bool Parking::deinitialize() {
+    //myfile.close();
     distanceMeasurement.clear();
     xPosition.clear();
     edgePosition.clear();
@@ -70,14 +71,15 @@ bool Parking::cycle() {
 
     case ParkingState::SEARCHING:
     {
-        logger.info("SEARCHING");
+        //double dd = getDistanceToMiddleLane();
+        logger.info("SEARCHING") << car_velocity;
 
          /***************************************************
          * drive straight along the middle of the right lane
          ***************************************************/
 
         //the desired state is such that phi=0 (straight driving) and y=0.2 (middle of right lane) with respect to the middle lane        
-        setSteeringAngles(-0.2, 0.0, DrivingMode::FORWARD);
+        setSteeringAngles(-0.2, config().get<float>("searchingPhiFactor"), DrivingMode::FORWARD);
 
         state.targetSpeed = config().get<float>("velocitySearching", 1.0);
 
@@ -97,7 +99,7 @@ bool Parking::cycle() {
 
         if (spaceFound)
         {
-            logger.info("valid parking space") << "size=" << parkingSpaceSize << ", startX=" << startX << ", endX=" << endX;
+            logger.error("valid parking space") << "size=" << parkingSpaceSize << ", startX=" << startX << ", endX=" << endX;
             timeSpaceWasFound = lms::Time::now();
             currentState = ParkingState::STOPPING;
         }
@@ -114,7 +116,7 @@ bool Parking::cycle() {
         ***************************************************/
 
         //drive straight still
-        setSteeringAngles(-0.2, 0.0, DrivingMode::FORWARD);
+        setSteeringAngles(-0.2, config().get<float>("searchingPhiFactor"), DrivingMode::FORWARD);
 
         //update current x-position
         updateXPosition(true, true);
@@ -152,8 +154,6 @@ bool Parking::cycle() {
 
         updateXPosition(false, true);
 
-        state.targetSpeed = -config().get<float>("velocityEntering", 0.5);
-
         double y0 = y0_dynamic;
 
         //TODO nicht fest
@@ -166,7 +166,7 @@ bool Parking::cycle() {
         double lr = config().get<float>("wheelbase", 0.21); //Radstand
         double l = config().get<float>("carLength", 0.32);  //Fahrzeuglänge
         double b = config().get<float>("carWidth", 0.2); //Fahrzeugbreite
-        double delta_max = config().get("maxSteeringAngle", 22)*M_PI/180; //maximum steering angle
+        double delta_max = config().get("maxSteeringAngle", 24)*M_PI/180; //maximum steering angle
         double k = config().get<float>("k", 0.03); //Sicherheitsabstand zur Ecke der 2. Box
         double d = config().get<float>("d", 0.05); //Sicherheitsabstand zur 1. Box im eingeparkten Zustand
 
@@ -179,15 +179,15 @@ bool Parking::cycle() {
         double x_begin_steering = config().get<float>("xDistanceCorrection",0.09) + endX + x0 - config().get<float>("distanceMidLidarX", 0.09);
 
         if (logThings) {
-            logger.debug("params") << "x0=" << x0 << ", y0=" << y0_dynamic << ", size=" << parkingSpaceSize << ", endX=" << endX << ", x_begin_steering=" << x_begin_steering;
-        }
-        else
-        {
+            logger.error("params") << "x0=" << x0 << ", y0=" << y0_dynamic << ", size=" << parkingSpaceSize << ", endX=" << endX << ", x_begin_steering=" << x_begin_steering;
             logThings = false;
         }
 
+
         if (currentXPosition <= x_begin_steering) //begin steering into parking space
-        {
+        {            
+            state.targetSpeed = -config().get<float>("velocityEntering", 0.5);
+
             if (yawAngleStartEntering == 0.0) yawAngleStartEntering = car_yawAngle;
 
             double drivenArc = car_yawAngle - yawAngleStartEntering;
@@ -223,9 +223,10 @@ bool Parking::cycle() {
         }
         else //drive straight backwards
         {            
-            //setSteeringAngles(-0.2, 0.0, DrivingMode::BACKWARDS);
-            state.steering_front = 0.0;
-            state.steering_rear = 0.0;
+            setSteeringAngles(-0.2, config().get<float>("searchingPhiFactor"), DrivingMode::BACKWARDS);
+            state.targetSpeed = -config().get<float>("velocityApproaching", 0.5);
+            //state.steering_front = 0.0;
+            //state.steering_rear = 0.0;
         }
 
         break;
@@ -233,11 +234,13 @@ bool Parking::cycle() {
     }
     case ParkingState::CORRECTING:
     {
-        logger.info("SEARCHING");
+        logger.info("CORRECTING");
 
         //set target state such that orientation (phi) is kept near 0 and y gets controlled by nearly the full steering angle
         double phi_ist = car_yawAngle - yawAngleStartEntering;
-        setSteeringAngles(-0.3, 0.0, 0.0, phi_ist, DrivingMode::FORWARD);
+        setSteeringAngles(-0.25, 0.0, 0.0, phi_ist, DrivingMode::FORWARD);
+
+        logger.info("correcting") << "sf=" << state.steering_front << ", sr=" << state.steering_rear;
 
         updateXPosition(false, true);
 
@@ -250,6 +253,31 @@ bool Parking::cycle() {
         if (currentXPosition < config().get<float>("correctingDistance", 0.05))
         {
             state.targetSpeed = config().get<float>("velocityCorrecting", 0.5);
+        }
+        else
+        {
+            currentXPosition = 0;
+            currentState = ParkingState::CORRECTING2;
+        }
+
+        break;
+    }
+    case ParkingState::CORRECTING2:
+    {
+        logger.info("CORRECTING2");
+
+        //set target state such that orientation (phi) is kept near 0 and y gets controlled by nearly the full steering angle
+        double phi_ist = car_yawAngle - yawAngleStartEntering;
+        logger.error("phi_ist") << phi_ist;
+        setSteeringAngles(-0.25, 0.0, 0.0, phi_ist, DrivingMode::BACKWARDS);
+
+        //logger.info("correcting") << "sf=" << state.steering_front << ", sr=" << state.steering_rear;
+
+        updateXPosition(false, true);
+
+        if (currentXPosition > -config().get<float>("correcting2Distance", 0.05))
+        {
+            state.targetSpeed = -config().get<float>("velocityCorrecting", 0.5);
         }
         else
         {
@@ -274,7 +302,7 @@ bool Parking::cycle() {
     }
 
     //logger.error("state") <<  "targetSpeed=" << state.targetSpeed << ", sf=" << state.steering_front << ", sr=" << state.steering_rear;
-
+    state.steering_rear = -state.steering_rear;
     car->putState(state);
     return true;
 }
@@ -299,7 +327,9 @@ void Parking::findEdges()
     b_min: minimum object width that has to be detected
     v: velocity
     s: safety factor*/
-    uint res = config().get<int>("lidarMeasurementsPerSecond", 300) * 0.1 / (config().get<float>("velocitySearching", 1.0) * 2.0);
+
+    uint res = config().get<int>("lidarMeasurementsPerSecond", 300) * 0.1 / (config().get<float>("velocitySearching", 1.0) * 3.0);
+    //uint res = 2;
 
     if (dst->size() < 4*res) return;
 
@@ -353,7 +383,7 @@ void Parking::findEdges()
             s << edgePosition.at(i);
             s << ", ";
         }
-        logger.debug("edgePositions") << s.str();
+        logger.info("edgePositions") << s.str();
 
         std::ostringstream s2;
         for (uint i=0; i < numEdges; ++i)
@@ -361,7 +391,7 @@ void Parking::findEdges()
             s2 << edgeType.at(i);
             s2 << ", ";
         }
-        logger.debug("edgeTypes") << s2.str();
+        logger.info("edgeTypes") << s2.str();
     }
 }
 
@@ -392,7 +422,12 @@ void Parking::updateXPosition(bool adjustVectors, bool useHallDistanceDirectly)
                 lastTimeStamp = distanceMsg.timestamp; //update timestamp
                 if (adjustVectors) xPosition.push_back(currentXPosition); //add x-position to the position vector
 
-                //myfile << currentXPosition << "," << distance << "," << car_velocity << std::endl;
+                if (adjustVectors) {
+                    //myfile << currentXPosition << "," << distance << "," << car_velocity << std::endl;
+                    //myfile.flush();
+                    //++lidarCount;
+                    //if (lidarCount % 100 == 0) logger.error("lidarCount") << lidarCount;
+                }
             }
         }
     }
@@ -501,9 +536,7 @@ bool Parking::findValidParkingSpace(double sizeMin, double sizeMax)
         }
         if (edgeType.at(i) == 1 && spaceStarted)
         {
-            size = edgePosition.at(i) - startX;
-
-            logger.error("size") <<size;
+            size = edgePosition.at(i) - startX;           
 
             if (size >= sizeMin && size <= sizeMax)
             {
@@ -522,11 +555,11 @@ bool Parking::findValidParkingSpace(double sizeMin, double sizeMax)
 void Parking::setSteeringAngles(double y_soll, double phi_soll, int drivingMode)
 {
 
-    //eigenvalues [-3, -3]
-    double R_forward[] = {3.000, 1.630, 3.000, 1.000};
-    double F_forward[] = {3.000, 0.630, 3.000, 0.000};
-    double R_backwards[] = {-0.150, 0.969, -0.150, 1.000};
-    double F_backwards[] = {-0.150, -0.031, -0.150, 0.000};
+    //eigenvalues [-2, -2]
+    double R_forward[] = {2.000, 1.420, 2.000, 1.000};
+    double F_forward[] = {2.000, 0.420, 2.000, 0.000};
+    double R_backwards[] = {-2.000, 0.580, -2.000, 1.000};
+    double F_backwards[] = {-2.000, -0.420, -2.000, 0.000};
 
     //find regression line y=mx+b through some points of the middle lane (not necessary but contributes to better stability in straight line performance)
     double m, b;
@@ -558,11 +591,11 @@ void Parking::setSteeringAngles(double y_soll, double phi_soll, int drivingMode)
 void Parking::setSteeringAngles(double y_soll, double phi_soll, double y_ist, double phi_ist, int drivingMode)
 {
 
-    //eigenvalues [-3, -3]
-    double R_forward[] = {3.000, 1.630, 3.000, 1.000};
-    double F_forward[] = {3.000, 0.630, 3.000, 0.000};
-    double R_backwards[] = {-0.150, 0.969, -0.150, 1.000};
-    double F_backwards[] = {-0.150, -0.031, -0.150, 0.000};
+    //eigenvalues [-2, -2]
+    double R_forward[] = {2.000, 1.420, 2.000, 1.000};
+    double F_forward[] = {2.000, 0.420, 2.000, 0.000};
+    double R_backwards[] = {-2.000, 0.580, -2.000, 1.000};
+    double F_backwards[] = {-2.000, -0.420, -2.000, 0.000};
 
     // define the controller gain R and the pre-filter F such that: u = [delta_v; delta_h] = F*[y_soll; phi_soll] - R*[y_ist; phi_ist]
     double delta_v, delta_h;

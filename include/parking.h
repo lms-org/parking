@@ -42,7 +42,7 @@ public:
     std::vector<int> edgeType;
     uint numEdges;
     enum DrivingMode {FORWARD, BACKWARDS};
-    enum ParkingState {SEARCHING, STOPPING, ENTERING, CORRECTING, FINISHED};
+    enum ParkingState {SEARCHING, STOPPING, ENTERING, CORRECTING, CORRECTING2, FINISHED};
     ParkingState currentState;
     bool firstCircleArc;
     double parkingSpaceSize, lastTimeStamp, lastImuTimeStamp, currentXPosition, lastValidMeasurement;
@@ -54,7 +54,8 @@ public:
     double car_yawAngle, car_velocity, car_xPosition;
     double yawAngleStartEntering;
 
-    std::ofstream myfile;    
+    std::ofstream myfile;
+    int lidarCount = 0;
 
 };
 
