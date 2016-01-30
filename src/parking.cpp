@@ -14,13 +14,15 @@ bool Parking::initialize() {
     y0_dynamic = 0.0;
     ind_end = 0.0;
     logThings = true;
+    straightMove = false;
+    fileCounter = 0;
 
     state.priority = 100;
     state.name = "PARKING";
 
     currentState = ParkingState::SEARCHING;
     firstCircleArc = true;
-    parkingSpaceSize = 0;
+    parkingSpaceSize = 0.0;
 
     mavlinkChannel = readChannel<Mavlink::Data>("MAVLINK_IN");
     sensors = readChannel<sensor_utils::SensorContainer>("SENSORS");
@@ -37,11 +39,25 @@ bool Parking::initialize() {
 }
 
 bool Parking::deinitialize() {
-    //myfile.close();
+
+    //myfile.open("parkingData.csv");
+    myfile.open(saveLogDir("parking") + "/parkingData_" + std::to_string(fileCounter++) + ".csv" );
+    for (int i = 0; i < xPosition.size(); ++i)
+    {
+        logger.error("xPositionSize") << xPosition.size();
+        myfile << xPosition.at(i) << "," << distanceMeasurement.at(i) << std::endl;
+    }
+    myfile.flush();
+    myfile.close();
+
     distanceMeasurement.clear();
+    distanceMeasurement.shrink_to_fit();
     xPosition.clear();
+    xPosition.shrink_to_fit();
     edgePosition.clear();
+    edgePosition.shrink_to_fit();
     edgeType.clear();
+    edgeType.shrink_to_fit();
     return true;
 }
 
@@ -89,7 +105,7 @@ bool Parking::cycle() {
          ***************************************************/
 
         //update current x-position, distance measurement vector and x-position vector
-        updateXPosition(true, false); //true, false
+        updateXPosition(true); //true, false
 
         //find the x-positions of big enough "jumps" in distance measurements
         Parking::findEdges();
@@ -119,7 +135,7 @@ bool Parking::cycle() {
         setSteeringAngles(-0.2, config().get<float>("searchingPhiFactor"), DrivingMode::FORWARD);
 
         //update current x-position
-        updateXPosition(true, true);
+        updateXPositionFromHall();
 
         //set target speed as if the car was decelerating constantly
         if (config().get<float>("decelerationStopping", 3.0)) {
@@ -130,17 +146,17 @@ bool Parking::cycle() {
             state.targetSpeed = 0.0;
         }
 
-        int num_y_vals = config().get("numberOfY0measurements", 20);
+        //int num_y_vals = config().get("numberOfY0measurements", 20);
         if (car->velocity() < config().get("minVelocityBeforeDrivingBackwards", 0.4)) {
 
             //find median of distance measurements taken shortly after detecting the second box --> y0
-            if (distanceMeasurement.size() > ind_end + num_y_vals && config().get<bool>("useYmeasurementOfSecondBox", false))
+            /*if (distanceMeasurement.size() > ind_end + num_y_vals && config().get<bool>("useYmeasurementOfSecondBox", false))
             {
                 std::nth_element(distanceMeasurement.begin() + ind_end, distanceMeasurement.begin() + ind_end + num_y_vals/2, distanceMeasurement.begin() + ind_end + num_y_vals);
                 double median = distanceMeasurement.at(ind_end + num_y_vals/2);
                 y0_dynamic = median - 0.06 + config().get<float>("distanceMidLidarY", 0.08); //0.06 lidar offset, 0.08 from lidar to middle of car
             }
-            else y0_dynamic = config().get<float>("y0_worstCase", 0.23);
+            else */ y0_dynamic = config().get<float>("y0_worstCase", 0.23);
 
             currentState = ParkingState::ENTERING;
         }
@@ -152,7 +168,7 @@ bool Parking::cycle() {
     {
         logger.info("ENTERING");
 
-        updateXPosition(false, true);
+        updateXPositionFromHall();
 
         double y0 = y0_dynamic;
 
@@ -183,6 +199,12 @@ bool Parking::cycle() {
             logThings = false;
         }
 
+        //new second method
+        double l_straight = config().get<float>("straightEnteringDistance", 0.05);
+        double phi_e = asin(l_straight*cos(alpha)/(r-b));
+        //logger.error("values") << "phi_e=" << phi_e << ", alpha=" << alpha<< ", r=" << r << ", b=" << b;
+
+
 
         if (currentXPosition <= x_begin_steering) //begin steering into parking space
         {            
@@ -192,33 +214,78 @@ bool Parking::cycle() {
 
             double drivenArc = car_yawAngle - yawAngleStartEntering;
 
-             if (firstCircleArc) {
-                 // set servos to max steering angle
-                 state.steering_front = -delta_max;
-                 state.steering_rear = delta_max;
+            if (config().get<bool>("useStandardMethod", true))
+            {
+                if (firstCircleArc) {
+                    // set servos to max steering angle
+                    state.steering_front = -delta_max;
+                    state.steering_rear = delta_max;
 
-                 logger.debug("firstCircleArc") << "alpha=" << alpha << ", drivenArc=" << drivenArc;
+                    logger.debug("firstCircleArc") << "alpha=" << alpha << ", drivenArc=" << drivenArc;
 
-                 if (drivenArc >= alpha) {
-                     firstCircleArc = false;                    
-                 }
-             }
-             else {
-                 // set servos to max steering angle in other direction
-                 state.steering_front = delta_max;
-                 state.steering_rear = -delta_max;
+                    if (drivenArc >= alpha) {
+                        firstCircleArc = false;
+                    }
+                }
+                else {
+                    // set servos to max steering angle in other direction
+                    state.steering_front = delta_max;
+                    state.steering_rear = -delta_max;
 
-                 logger.debug("secondCircleArc") << "alpha=" << alpha << ", drivenArc=" << drivenArc;
+                    logger.debug("secondCircleArc") << "alpha=" << alpha << ", drivenArc=" << drivenArc;
 
-                 if (drivenArc <= 0.0 + config().get<float>("alphaOffset",0.0)) {
-                     state.steering_front = 0.0; // * 180. / M_PI;
-                     state.steering_rear = 0.0; // * 180. / M_PI;
-                     state.targetSpeed = 0.0; //config().get<float>("velocityCorrecting", 0.5);
+                    if (drivenArc <= 0.0 + config().get<float>("alphaOffset",0.0)) {
+                        state.steering_front = 0.0; // * 180. / M_PI;
+                        state.steering_rear = 0.0; // * 180. / M_PI;
+                        state.targetSpeed = 0.0; //config().get<float>("velocityCorrecting", 0.5);
 
-                     currentXPosition = 0;
-                     currentState = ParkingState::CORRECTING;
-                 }
-             }
+                        currentXPosition = 0;
+                        currentState = ParkingState::CORRECTING;
+                    }
+                }
+            }
+            else //new method
+            {
+                if (firstCircleArc) {
+                    // set servos to max steering angle
+                    state.steering_front = -delta_max;
+                    state.steering_rear = delta_max;
+
+                    logger.debug("firstCircleArc") << "alpha=" << alpha << ", drivenArc=" << drivenArc;
+
+                    if (drivenArc >= alpha) {
+                        firstCircleArc = false;
+                        straightMove = true;
+                        currentXPosition = 0.0;
+                    }
+                }
+                else if (straightMove)
+                {                    
+                    state.steering_front = 0.0;
+                    state.steering_rear = 0.0;
+                    if (currentXPosition <= -config().get<float>("straightEnteringDistance", 0.1))
+                    {
+                        straightMove = false;
+                    }
+                }
+                else {
+                    // set servos to max steering angle in other direction
+                    state.steering_front = delta_max;
+                    state.steering_rear = -delta_max;
+
+                    logger.debug("secondCircleArc") << "alpha=" << alpha << ", drivenArc=" << drivenArc;
+
+                    if (drivenArc <= phi_e + config().get<float>("alphaOffset",0.0)) {
+                        state.steering_front = 0.0;
+                        state.steering_rear = 0.0;
+                        state.targetSpeed = 0.0;
+
+                        currentXPosition = 0;
+                        currentState = ParkingState::CORRECTING;
+                    }
+                }
+            }
+
 
         }
         else //drive straight backwards
@@ -242,7 +309,7 @@ bool Parking::cycle() {
 
         logger.info("correcting") << "sf=" << state.steering_front << ", sr=" << state.steering_rear;
 
-        updateXPosition(false, true);
+        updateXPositionFromHall();
 
         //use distance from middle lane
         /*if (getDistanceToMiddleLane() >= config().get<float>("correctingDistanceMiddleLane", 0.62) && config().get<float>("correctingDistanceMiddleLane", 0.62)) {
@@ -273,7 +340,7 @@ bool Parking::cycle() {
 
         //logger.info("correcting") << "sf=" << state.steering_front << ", sr=" << state.steering_rear;
 
-        updateXPosition(false, true);
+        updateXPositionFromHall();
 
         if (currentXPosition > -config().get<float>("correcting2Distance", 0.05))
         {
@@ -302,7 +369,7 @@ bool Parking::cycle() {
     }
 
     //logger.error("state") <<  "targetSpeed=" << state.targetSpeed << ", sf=" << state.steering_front << ", sr=" << state.steering_rear;
-    state.steering_rear = -state.steering_rear;
+    //state.steering_rear = -state.steering_rear;
     car->putState(state);
     return true;
 }
@@ -328,8 +395,7 @@ void Parking::findEdges()
     v: velocity
     s: safety factor*/
 
-    uint res = config().get<int>("lidarMeasurementsPerSecond", 300) * 0.1 / (config().get<float>("velocitySearching", 1.0) * 3.0);
-    //uint res = 2;
+    uint res = config().get<int>("lidarMeasurementsPerSecond", 300) * 0.1 / (config().get<float>("velocitySearching", 1.0) * 2.0);
 
     if (dst->size() < 4*res) return;
 
@@ -395,19 +461,18 @@ void Parking::findEdges()
     }
 }
 
-void Parking::updateXPosition(bool adjustVectors, bool useHallDistanceDirectly)
+void Parking::updateXPosition(bool adjustVectors)
 {
 
     for( const auto& msg : *mavlinkChannel)
     {
-
         if (msg.msgid == MAVLINK_MSG_ID_PROXIMITY && cycleCounter > 5) {  //cycleCounter > 1 nur für debugging, da extrem viele messwerte in den ersten paar frames auftauchen
             mavlink_proximity_t distanceMsg;
             mavlink_msg_proximity_decode(&msg, &distanceMsg);
             double distance = distanceMsg.distance;
             double maxDistance = config().get<float>("maxDistanceLidar", 0.6);
             if (distance > maxDistance) distance = maxDistance; //limit max distance
-            if (distance < 0.09) distance = lastValidMeasurement; //ignore measurements < 9 cm (artifacts)
+            if (distance < config().get<float>("minDistanceLidar", 0.09)) distance = lastValidMeasurement; //ignore measurements < 9 cm (artifacts)
 
             if (adjustVectors) distanceMeasurement.push_back(distance); //add the measurement to the distance vector
             //logger.debug("lidar measurement") << distance;
@@ -418,31 +483,30 @@ void Parking::updateXPosition(bool adjustVectors, bool useHallDistanceDirectly)
                 lastTimeStamp = distanceMsg.timestamp;
             }
             else {
-                if (!useHallDistanceDirectly) currentXPosition += car_velocity*(distanceMsg.timestamp - lastTimeStamp)/1000000.0; //update x-position (timestamp is in us)
+                currentXPosition += car_velocity*(distanceMsg.timestamp - lastTimeStamp)/1000000.0; //update x-position (timestamp is in us)
                 lastTimeStamp = distanceMsg.timestamp; //update timestamp
                 if (adjustVectors) xPosition.push_back(currentXPosition); //add x-position to the position vector
 
-                if (adjustVectors) {
+                //if (adjustVectors) {
                     //myfile << currentXPosition << "," << distance << "," << car_velocity << std::endl;
                     //myfile.flush();
                     //++lidarCount;
                     //if (lidarCount % 100 == 0) logger.error("lidarCount") << lidarCount;
-                }
+                //}
             }
         }
-    }
+    }   
 
-    if (useHallDistanceDirectly)
-    {
-        if(sensors->hasSensor("HALL")) {
-            auto hall = sensors->sensor<sensor_utils::Odometer>("HALL");
-            auto dst = hall->distance.x();
-            currentXPosition += dst;
-            logger.debug("currentXPosition") << currentXPosition;
-        }
-    }
+}
 
-    //if (distanceMeasurement.size() > 0) logger.debug("lidar measurement") << distanceMeasurement.at(distanceMeasurement.size()-1);
+void Parking::updateXPositionFromHall()
+{
+    if(sensors->hasSensor("HALL")) {
+        auto hall = sensors->sensor<sensor_utils::Odometer>("HALL");
+        auto dst = hall->distance.x();
+        currentXPosition += dst;
+        //logger.debug("currentXPosition") << currentXPosition;
+    }
 }
 
 void Parking::updateYawAngle()

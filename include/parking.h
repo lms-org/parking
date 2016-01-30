@@ -21,7 +21,8 @@ public:
     bool cycle();
 
     void updateYawAngle();
-    void updateXPosition(bool adjustVectors, bool useHallDistanceDirectly);
+    void updateXPosition(bool adjustVectors);
+    void updateXPositionFromHall();
     void updateVelocity();
 
     void findEdges();
@@ -49,12 +50,14 @@ public:
     double startX, endX, y0_dynamic, ind_end;
     lms::Time timeSpaceWasFound;
     bool logThings;
+    bool straightMove;
 
     sensor_utils::Car::State state;
     double car_yawAngle, car_velocity, car_xPosition;
     double yawAngleStartEntering;
 
     std::ofstream myfile;
+    int fileCounter;
     int lidarCount = 0;
 
 };
