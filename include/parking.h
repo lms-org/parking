@@ -21,8 +21,8 @@ public:
     bool cycle();
 
     void updateYawAngle();
-    void updateXPosition(bool adjustVectors);
-    void updateXPositionFromHall();
+    void updatePositionAndDistance();
+    void updatePositionFromHall();
     void updateVelocity();
 
     void findEdges();
@@ -56,7 +56,7 @@ public:
     double car_yawAngle, car_velocity, car_xPosition;
     double yawAngleStartEntering;
 
-    std::ofstream myfile;
+    //std::ofstream myfile;
     int fileCounter;
     int lidarCount = 0;
 
