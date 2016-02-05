@@ -38,12 +38,13 @@ public:
 
     int cycleCounter;
     std::vector<double> distanceMeasurement;
+    std::vector<double> distanceMeasurement2;
     std::vector<double> xPosition;
     std::vector<double> edgePosition;
     std::vector<int> edgeType;
     uint numEdges;
     enum DrivingMode {FORWARD, BACKWARDS};
-    enum ParkingState {SEARCHING, STOPPING, ENTERING, CORRECTING, CORRECTING2, FINISHED};
+    enum ParkingState {SEARCHING, STOPPING, ENTERING, CORRECTING, CORRECTING2, FINISHED, WORST_CASE_BACKWARDS};
     ParkingState currentState;
     bool firstCircleArc;
     double parkingSpaceSize, lastTimeStamp, lastImuTimeStamp, currentXPosition, lastValidMeasurement;

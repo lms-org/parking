@@ -31,7 +31,7 @@ bool Parking::initialize() {
     currentXPosition = 0;
     lastTimeStamp = -1;
     lastImuTimeStamp = -1;
-    lastValidMeasurement = 0.5;
+    lastValidMeasurement = config().get<float>("maxDistanceLidar", 0.6);
 
     //myfile.open("parkingData.csv");
     //myfile.open(saveLogDir("parking") + "/parkingData.csv" );
@@ -40,16 +40,17 @@ bool Parking::initialize() {
 
 bool Parking::deinitialize() {
     //myfile.open("parkingData.csv");
-    //std::string filename = saveLogDir("parking") + "/parkingData_" ;//+ std::to_string(fileCounter++) + ".csv";
-    std::ofstream myfile("parkingData.csv");//saveLogDir("parking") + "/parkingData_");
-    logger.error("xPositionSize") << "filecount " << fileCounter << ": " << xPosition.size();
+    const std::string filename = saveLogDir("parking") + "/parkingData_" + std::to_string(fileCounter++) + ".csv";
+    std::ofstream myfile(filename);
+    logger.info("file saved") << "filecount: " << fileCounter << ", vectorSize: " << xPosition.size();
     for (int i = 0; i < xPosition.size(); ++i)
     {
-        myfile << xPosition.at(i) << "," << distanceMeasurement.at(i) << std::endl;
+        myfile << xPosition.at(i) << "," << distanceMeasurement.at(i) << "," << distanceMeasurement2.at(i) <<std::endl;
     }
     myfile.flush();
     myfile.close();
 
+    //reset data vectors
     distanceMeasurement.clear();
     distanceMeasurement.shrink_to_fit();
     xPosition.clear();
@@ -69,6 +70,14 @@ bool Parking::cycle() {
     }*/
 
     if(getService<phoenix_CC2016_service::Phoenix_CC2016Service>("PHOENIX_SERVICE")->rcStateChanged()){
+        /*distanceMeasurement.clear();
+        distanceMeasurement.shrink_to_fit();
+        xPosition.clear();
+        xPosition.shrink_to_fit();
+        edgePosition.clear();
+        edgePosition.shrink_to_fit();
+        edgeType.clear();
+        edgeType.shrink_to_fit();*/
         deinitialize();
         initialize();
         logger.error("reset parking");
@@ -87,7 +96,7 @@ bool Parking::cycle() {
 
     case ParkingState::SEARCHING:
     {
-        //double dd = getDistanceToMiddleLane();
+
         logger.info("SEARCHING") << car_velocity;
 
          /***************************************************
@@ -118,6 +127,12 @@ bool Parking::cycle() {
             logger.error("valid parking space") << "size=" << parkingSpaceSize << ", startX=" << startX << ", endX=" << endX;
             timeSpaceWasFound = lms::Time::now();
             currentState = ParkingState::STOPPING;
+        }
+
+        //worst case: reached end of parking lane without finding a valid space --> drive backwards and try again
+        if (currentXPosition > config().get<float>("xMaxBeforeWorstCase", 6.0)) // TODO: && foundObstacle
+        {
+            currentState = ParkingState::WORST_CASE_BACKWARDS;
         }
 
         break;       
@@ -302,6 +317,22 @@ bool Parking::cycle() {
 
         break;
     }
+    case ParkingState::WORST_CASE_BACKWARDS: {
+
+        logger.info("WORST_CASE_BACKWARDS");
+
+        setSteeringAngles(-0.2, config().get<float>("searchingPhiFactor"), DrivingMode::BACKWARDS);
+        state.targetSpeed = -config().get<float>("velocitySearching", 1.0);
+
+        if (currentXPosition <= config().get<float>("xStartSearchingAgain", 0.8))
+        {
+            //reset parking module and try again
+            deinitialize();
+            initialize();
+        }
+
+        break;
+    }
 
     }
 
@@ -411,10 +442,12 @@ void Parking::updatePositionAndDistance()
 
             if (distanceMeasurement.size() < 5) {
                 distanceMeasurement.push_back(config().get<float>("maxDistanceLidar", 0.6)); //prevent possible spikes at the beginning
+                distanceMeasurement2.push_back(config().get<float>("maxDistanceLidar", 0.6));
             }
             else
             {
                 distanceMeasurement.push_back(distance); //add the measurement to the distance vector
+                distanceMeasurement2.push_back(distance);
             }
 
             int medianSize = config().get<int>("medianFilterSize", 3);
