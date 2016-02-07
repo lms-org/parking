@@ -19,6 +19,7 @@ public:
     bool initialize();
     bool deinitialize();
     bool cycle();
+    Parking(): fileCounter(0) {};
 
     void updateYawAngle();
     void updatePositionAndDistance();
@@ -44,13 +45,12 @@ public:
     std::vector<int> edgeType;
     uint numEdges;
     enum DrivingMode {FORWARD, BACKWARDS};
-    enum ParkingState {SEARCHING, STOPPING, ENTERING, CORRECTING, CORRECTING2, FINISHED, WORST_CASE_BACKWARDS};
+    enum ParkingState {SEARCHING, STOPPING, ENTERING, CORRECTING, CORRECTING2, CORRECTING3, FINISHED, WORST_CASE_BACKWARDS};
     ParkingState currentState;
     bool firstCircleArc;
     double parkingSpaceSize, lastTimeStamp, lastImuTimeStamp, currentXPosition, lastValidMeasurement;
     double startX, endX, y0_dynamic, ind_end;
     lms::Time timeSpaceWasFound;
-    bool logThings;
     bool straightMove;
 
     sensor_utils::Car::State state;

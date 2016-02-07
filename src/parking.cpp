@@ -2,6 +2,7 @@
 #include "phoenix_CC2016_service/phoenix_CC2016_service.h"
 
 
+
 bool Parking::initialize() {
 
     cycleCounter = 0;
@@ -13,9 +14,8 @@ bool Parking::initialize() {
     endX = 0.0;
     y0_dynamic = 0.0;
     ind_end = 0.0;
-    logThings = true;
     straightMove = false;
-    fileCounter = 0;
+
 
     state.priority = 100;
     state.name = "PARKING";
@@ -97,8 +97,6 @@ bool Parking::cycle() {
     case ParkingState::SEARCHING:
     {
 
-        logger.info("SEARCHING") << car_velocity;
-
          /***************************************************
          * drive straight along the middle of the right lane
          ***************************************************/
@@ -140,7 +138,6 @@ bool Parking::cycle() {
 
     case ParkingState::STOPPING:
     {
-        logger.info("STOPPING");
 
         /***************************************************
         * come to a stop, but dont slip (otherwise the position measurements are crap)
@@ -174,7 +171,8 @@ bool Parking::cycle() {
 
     case ParkingState::ENTERING:
     {
-        logger.info("ENTERING");
+
+        state.indicatorRight = true;
 
         updatePositionFromHall();
 
@@ -201,15 +199,24 @@ bool Parking::cycle() {
         double x0 = d + l/2 + 2*r*sin(alpha) - parkingSpaceSize; //Abstand vom Ende der 2. Box zur Mitte des Fahrzeugs bei Lenkbeginn (Anfang erster Kreisbogen)        
         double x_begin_steering = config().get<float>("xDistanceCorrection",0.09) + endX + x0 - config().get<float>("distanceMidLidarX", 0.09);
 
-        if (logThings) {
-            logger.error("params") << "x0=" << x0 << ", y0=" << y0_dynamic << ", size=" << parkingSpaceSize << ", endX=" << endX << ", x_begin_steering=" << x_begin_steering;
-            logThings = false;
-        }
-
-        if (currentXPosition >= x_begin_steering) //drive straight backwards
+        if (currentXPosition > x_begin_steering) //drive straight backwards
         {
             setSteeringAngles(-0.2, config().get<float>("searchingPhiFactor"), DrivingMode::BACKWARDS);
-            state.targetSpeed = -config().get<float>("velocityApproaching", 0.5);
+
+            double brakingDistance = config().get<float>("brakingDistanceUntilSteering", 0.15);
+            //TODO evtl
+            if (false && currentXPosition < x_begin_steering + brakingDistance)
+            {
+                double deltaX = currentXPosition - x_begin_steering; //distance until steering
+                double deltaV = config().get<float>("velocityApproaching", 1.0) - config().get<float>("velocityEntering", 0.5);
+                state.targetSpeed = -config().get<float>("velocityApproaching", 0.5)
+                        +  (1.0-deltaX/brakingDistance) * deltaV;
+            }
+            else
+            {
+                state.targetSpeed = -config().get<float>("velocityApproaching", 0.5);
+            }
+
         }
         else //begin steering into parking space
         {            
@@ -250,13 +257,9 @@ bool Parking::cycle() {
     }
     case ParkingState::CORRECTING:
     {
-        logger.info("CORRECTING");
-
         //set target state such that orientation (phi) is kept near 0 and y gets controlled by nearly the full steering angle
         double phi_ist = car_yawAngle - yawAngleStartEntering;
-        setSteeringAngles(-0.25, 0.0, 0.0, phi_ist, DrivingMode::FORWARD);
-
-        logger.info("correcting") << "sf=" << state.steering_front << ", sr=" << state.steering_rear;
+        setSteeringAngles(-0.29, 0.0, 0.0, 6.0*phi_ist, DrivingMode::FORWARD);
 
         updatePositionFromHall();
 
@@ -282,16 +285,13 @@ bool Parking::cycle() {
     }
     case ParkingState::CORRECTING2:
     {
-        logger.info("CORRECTING2");
-
         //set target state such that orientation (phi) is kept near 0 and y gets controlled by nearly the full steering angle
         double phi_ist = car_yawAngle - yawAngleStartEntering;
         logger.error("phi_ist") << phi_ist;
-        setSteeringAngles(-0.25, 0.0, 0.0, phi_ist, DrivingMode::BACKWARDS);
-
-        //logger.info("correcting") << "sf=" << state.steering_front << ", sr=" << state.steering_rear;
+        setSteeringAngles(-0.29, 0.0, 0.0, 6.0*phi_ist, DrivingMode::BACKWARDS);
 
         updatePositionFromHall();
+
 
         if (currentXPosition > -config().get<float>("correctingSecondDistance", 0.05))
         {
@@ -299,14 +299,34 @@ bool Parking::cycle() {
         }
         else
         {
+            currentXPosition = 0;
+            currentState = ParkingState::CORRECTING3;
+        }
+
+        break;
+    }
+    case ParkingState::CORRECTING3:
+    {
+        //set target state such that orientation (phi) is kept near 0 and y gets controlled by nearly the full steering angle
+        double phi_ist = car_yawAngle - yawAngleStartEntering;
+        logger.error("phi_ist") << phi_ist;
+        setSteeringAngles(-0.29, 0.0, 0.0, 6.0*phi_ist, DrivingMode::FORWARD);
+
+        updatePositionFromHall();
+
+        if (currentXPosition < config().get<float>("correctingThirdDistance", 0.04))
+        {
+            state.targetSpeed = config().get<float>("velocityCorrecting", 0.5);
+        }
+        else
+        {
+            currentXPosition = 0;
             currentState = ParkingState::FINISHED;
         }
 
         break;
     }
     case ParkingState::FINISHED: {
-
-        logger.info("FINISHED");
 
         state.targetSpeed = 0.0;
         state.steering_front = 0.0;
@@ -319,7 +339,7 @@ bool Parking::cycle() {
     }
     case ParkingState::WORST_CASE_BACKWARDS: {
 
-        logger.info("WORST_CASE_BACKWARDS");
+        updatePositionFromHall();
 
         setSteeringAngles(-0.2, config().get<float>("searchingPhiFactor"), DrivingMode::BACKWARDS);
         state.targetSpeed = -config().get<float>("velocitySearching", 1.0);
@@ -432,13 +452,13 @@ void Parking::updatePositionAndDistance()
 
     for( const auto& msg : *mavlinkChannel)
     {
-        if (msg.msgid == MAVLINK_MSG_ID_PROXIMITY && cycleCounter > 5) {  //cycleCounter > 1 nur für debugging, da extrem viele messwerte in den ersten paar frames auftauchen
+        if (msg.msgid == MAVLINK_MSG_ID_PROXIMITY && msg.compid == 0 && cycleCounter > 5) {  //cycleCounter > 1 nur für debugging, da extrem viele messwerte in den ersten paar frames auftauchen
             mavlink_proximity_t distanceMsg;
             mavlink_msg_proximity_decode(&msg, &distanceMsg);
             double distance = distanceMsg.distance;
             double maxDistance = config().get<float>("maxDistanceLidar", 0.6);
             if (distance > maxDistance) distance = maxDistance; //limit max distance
-            //if (distance < config().get<float>("minDistanceLidar", 0.09)) distance = lastValidMeasurement; //ignore measurements < 9 cm (artifacts)
+            if (distance < 0.05) distance = lastValidMeasurement; //ignore measurements < 9 cm (artifacts)
 
             if (distanceMeasurement.size() < 5) {
                 distanceMeasurement.push_back(config().get<float>("maxDistanceLidar", 0.6)); //prevent possible spikes at the beginning
@@ -457,7 +477,7 @@ void Parking::updatePositionAndDistance()
             }
 
             //logger.debug("lidar measurement") << distance;
-            //lastValidMeasurement = distance;
+            lastValidMeasurement = distance;
 
             if (lastTimeStamp < 0) {
                 xPosition.push_back(currentXPosition); //at first iteration of framework
