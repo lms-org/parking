@@ -322,6 +322,9 @@ bool Parking::cycle() {
         {
             currentXPosition = 0;
             currentState = ParkingState::FINISHED;
+
+            state.indicatorLeft = true;
+            state.indicatorRight = true;
         }
 
         break;
@@ -332,8 +335,8 @@ bool Parking::cycle() {
         state.steering_front = 0.0;
         state.steering_rear = 0.0;
 
-        state.indicatorLeft = true;
-        state.indicatorRight = true;
+        state.indicatorLeft = false;
+        state.indicatorRight = false;
 
         break;
     }
@@ -355,6 +358,9 @@ bool Parking::cycle() {
     }
 
     }
+
+    state.indicatorRight = true;
+
 
     car->putState(state);
     return true;
