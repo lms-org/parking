@@ -60,6 +60,10 @@ public:
     //std::ofstream myfile;
     int fileCounter;
     int lidarCount = 0;
+    struct ParkingStateContainer{
+        ParkingState state;
+        DrivingMode driveMode;
+    };
 
 };
 
