@@ -45,7 +45,7 @@ public:
     std::vector<int> edgeType;
     uint numEdges;
     enum DrivingMode {FORWARD, BACKWARDS};
-    enum ParkingState {SEARCHING, STOPPING, ENTERING, CORRECTING, CORRECTING2, CORRECTING3, FINISHED, WORST_CASE_BACKWARDS};
+    enum ParkingState {SEARCHING, STOPPING, ENTERING, CORRECTING, FINISHED, WORST_CASE_BACKWARDS};
     ParkingState currentState;
     bool firstCircleArc;
     double parkingSpaceSize, lastTimeStamp, lastImuTimeStamp, currentXPosition, lastValidMeasurement;
@@ -56,6 +56,7 @@ public:
     sensor_utils::Car::State state;
     double car_yawAngle, car_velocity, car_xPosition;
     double yawAngleStartEntering;
+    int correctingCounter;
 
     //std::ofstream myfile;
     int fileCounter;
