@@ -87,6 +87,7 @@ bool Parking::cycle() {
         updateVelocity();       
     }
 
+
     switch (currentState)
     {
 
@@ -622,8 +623,8 @@ void Parking::setSteeringAngles(double y_soll, double phi_soll, int drivingMode)
     //eigenvalues [-2, -2]
     double R_forward[] = {2.000, 1.420, 2.000, 1.000};
     double F_forward[] = {2.000, 0.420, 2.000, 0.000};
-    double R_backwards[] = {-2.000, 0.580, -2.000, 1.000};
-    double F_backwards[] = {-2.000, -0.420, -2.000, 0.000};
+    double R_backwards[] = {-6.000, -0.260, -6.000, 1.000};
+    double F_backwards[] = {-6.000, -1.260, -6.000, 0.000};
 
     //find regression line y=mx+b through some points of the middle lane (not necessary but contributes to better stability in straight line performance)
     double m, b;
