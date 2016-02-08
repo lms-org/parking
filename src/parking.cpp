@@ -15,12 +15,13 @@ bool Parking::initialize() {
     y0_dynamic = 0.0;
     ind_end = 0.0;
     straightMove = false;
+    correctingCounter = 0;
 
 
     state.priority = 100;
     state.name = "PARKING";
 
-    currentState = ParkingState::SEARCHING;
+    currentState = ParkingState::ENTERING;
     firstCircleArc = true;
     parkingSpaceSize = 0.0;
 
@@ -64,10 +65,13 @@ bool Parking::deinitialize() {
 
 bool Parking::cycle() {
 
-    /*if(getService<phoenix_CC2016_service::Phoenix_CC2016Service>("PHOENIX_SERVICE")->driveMode() != phoenix_CC2016_service::CCDriveMode::PARKING){
+    logger.error("driveMode") <<   static_cast<int>(getService<phoenix_CC2016_service::Phoenix_CC2016Service>("PHOENIX_SERVICE")->driveMode() );
+
+
+    if(getService<phoenix_CC2016_service::Phoenix_CC2016Service>("PHOENIX_SERVICE")->driveMode() != phoenix_CC2016_service::CCDriveMode::PARKING){
         //TODO remove parking car-control-state
         return true;
-    }*/
+    }
 
     if(getService<phoenix_CC2016_service::Phoenix_CC2016Service>("PHOENIX_SERVICE")->rcStateChanged()){
         /*distanceMeasurement.clear();
@@ -257,74 +261,44 @@ bool Parking::cycle() {
     }
     case ParkingState::CORRECTING:
     {
-        //set target state such that orientation (phi) is kept near 0 and y gets controlled by nearly the full steering angle
-        double phi_ist = car_yawAngle - yawAngleStartEntering;
-        setSteeringAngles(-0.29, 0.0, 0.0, 6.0*phi_ist, DrivingMode::FORWARD);
 
         updatePositionFromHall();
 
-        if (currentXPosition < config().get<float>("correctingDistance", 0.05))
+        std::vector<float> correctingDistances = config().getArray<float>("correctingDistances");
+
+        if (correctingCounter == correctingDistances.size())
         {
-            state.targetSpeed = config().get<float>("velocityCorrecting", 0.5);
-        }
-        else
-        {
-            currentXPosition = 0;
-            if (config().get<bool>("useSecondCorrecting", false))
-            {
-                currentState = ParkingState::CORRECTING2;
-            }
-            else
-            {
-                currentState = ParkingState::FINISHED;
-            }
-
-        }
-
-        break;
-    }
-    case ParkingState::CORRECTING2:
-    {
-        //set target state such that orientation (phi) is kept near 0 and y gets controlled by nearly the full steering angle
-        double phi_ist = car_yawAngle - yawAngleStartEntering;
-        logger.error("phi_ist") << phi_ist;
-        setSteeringAngles(-0.29, 0.0, 0.0, 6.0*phi_ist, DrivingMode::BACKWARDS);
-
-        updatePositionFromHall();
-
-
-        if (currentXPosition > -config().get<float>("correctingSecondDistance", 0.05))
-        {
-            state.targetSpeed = -config().get<float>("velocityCorrecting", 0.5);
-        }
-        else
-        {
-            currentXPosition = 0;
-            currentState = ParkingState::CORRECTING3;
-        }
-
-        break;
-    }
-    case ParkingState::CORRECTING3:
-    {
-        //set target state such that orientation (phi) is kept near 0 and y gets controlled by nearly the full steering angle
-        double phi_ist = car_yawAngle - yawAngleStartEntering;
-        logger.error("phi_ist") << phi_ist;
-        setSteeringAngles(-0.29, 0.0, 0.0, 6.0*phi_ist, DrivingMode::FORWARD);
-
-        updatePositionFromHall();
-
-        if (currentXPosition < config().get<float>("correctingThirdDistance", 0.04))
-        {
-            state.targetSpeed = config().get<float>("velocityCorrecting", 0.5);
-        }
-        else
-        {
-            currentXPosition = 0;
             currentState = ParkingState::FINISHED;
+        }
+        else
+        {
+            double phi_ist = car_yawAngle - yawAngleStartEntering;
 
-            state.indicatorLeft = true;
-            state.indicatorRight = true;
+            if (correctingCounter%2 == 0) //forward
+            {
+                state.targetSpeed = config().get<float>("velocityCorrecting", 0.5);
+                setSteeringAngles(-0.29, 0.0, 0.0, 6.0*phi_ist, DrivingMode::FORWARD);
+
+                if (currentXPosition >= correctingDistances.at(correctingCounter))
+                {
+                    ++correctingCounter;
+                    currentXPosition = 0.0;
+                }
+
+            }
+            else //backwards
+            {
+                state.targetSpeed = -config().get<float>("velocityCorrecting", 0.5);
+                setSteeringAngles(-0.29, 0.0, 0.0, 6.0*phi_ist, DrivingMode::BACKWARDS);
+
+                if (-currentXPosition >= correctingDistances.at(correctingCounter))
+                {
+                    ++correctingCounter;
+                    currentXPosition = 0.0;
+                }
+
+            }
+
         }
 
         break;
