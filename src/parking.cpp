@@ -65,9 +65,6 @@ bool Parking::deinitialize() {
 
 bool Parking::cycle() {
 
-    logger.error("driveMode") <<   static_cast<int>(getService<phoenix_CC2016_service::Phoenix_CC2016Service>("PHOENIX_SERVICE")->driveMode() );
-
-
     if(getService<phoenix_CC2016_service::Phoenix_CC2016Service>("PHOENIX_SERVICE")->driveMode() != phoenix_CC2016_service::CCDriveMode::PARKING){
         //TODO remove parking car-control-state
         return true;
