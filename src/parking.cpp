@@ -64,10 +64,10 @@ bool Parking::deinitialize() {
 
 bool Parking::cycle() {
 
-    /*if(getService<phoenix_CC2016_service::Phoenix_CC2016Service>("PHOENIX_SERVICE")->driveMode() != phoenix_CC2016_service::CCDriveMode::PARKING){
+    if(getService<phoenix_CC2016_service::Phoenix_CC2016Service>("PHOENIX_SERVICE")->driveMode() != phoenix_CC2016_service::CCDriveMode::PARKING){
         //TODO remove parking car-control-state
         return true;
-    }*/
+    }
 
     if(getService<phoenix_CC2016_service::Phoenix_CC2016Service>("PHOENIX_SERVICE")->rcStateChanged()){
         /*distanceMeasurement.clear();
