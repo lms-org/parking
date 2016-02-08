@@ -16,6 +16,7 @@ bool Parking::initialize() {
     ind_end = 0.0;
     straightMove = false;
     correctingCounter = 0;
+    yawAngleSet = false;
 
 
     state.priority = 100;
@@ -67,7 +68,6 @@ bool Parking::deinitialize() {
 
 bool Parking::cycle() {
     lms::ServiceHandle<phoenix_CC2016_service::Phoenix_CC2016Service> phoenixService= getService<phoenix_CC2016_service::Phoenix_CC2016Service>("PHOENIX_SERVICE");
-
     if((phoenixService->driveMode() != phoenix_CC2016_service::CCDriveMode::PARKING)|| phoenixService->rcStateChanged()){
         //remove parking car-control-state
         car->removeState("PARKING");
@@ -218,7 +218,11 @@ bool Parking::cycle() {
         {            
             state.targetSpeed = -config().get<float>("velocityEntering", 0.5);
 
-            if (yawAngleStartEntering == 0.0) yawAngleStartEntering = car_yawAngle; //set yawAngle reference
+            if (! yawAngleSet)
+            {
+                yawAngleSet = true;
+                yawAngleStartEntering = car_yawAngle; //set yawAngle reference
+            }
 
             double drivenArc = car_yawAngle - yawAngleStartEntering;
 
@@ -477,8 +481,36 @@ void Parking::updatePositionFromHall()
 
 void Parking::updateYawAngle()
 {
+    //upate from ego estimator
     car_yawAngle += car->deltaPhi();
-    return;   
+
+    //old function using raw measurements
+    /*double yawRate = 0.0;
+    int yawCount = 0;
+    for( const auto& msg : *mavlinkChannel )
+    {
+        if (msg.msgid == MAVLINK_MSG_ID_IMU && cycleCounter > 5) {
+            mavlink_imu_t imuMessage;
+            mavlink_msg_imu_decode(&msg, &imuMessage);
+            double offset = 0.0299405;
+            yawRate += imuMessage.zgyro-offset;
+            ++yawCount;
+            if (lastImuTimeStamp < 0) {
+                lastImuTimeStamp = imuMessage.timestamp;
+            }
+            else {
+                //double yawAngleDiffGrad = 10*(imuMessage.zgyro-offset)*(imuMessage.timestamp - lastTimeStamp)/1000000.0;
+                //car_yawAngle += yawAngleDiffGrad*M_PI/180.0;
+                //car_yawAngle += (imuMessage.zgyro-offset)*(imuMessage.timestamp - lastTimeStamp)/1000000.0;
+                lastImuTimeStamp = imuMessage.timestamp;
+            }
+            //logger.debug("car_yawAngle") << car_yawAngle;
+        }
+    }
+    if (yawCount > 0) yawRate /= yawCount;
+    car_yawAngle += 0.01*yawRate;*/
+
+    return;
 }
 
 
