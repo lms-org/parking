@@ -21,7 +21,7 @@ bool Parking::initialize() {
     state.priority = 100;
     state.name = "PARKING";
 
-    currentState = ParkingState::ENTERING;
+    currentState = ParkingState::SEARCHING;
     firstCircleArc = true;
     parkingSpaceSize = 0.0;
 
