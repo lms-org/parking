@@ -41,15 +41,17 @@ bool Parking::initialize() {
 
 bool Parking::deinitialize() {
     //myfile.open("parkingData.csv");
-    const std::string filename = saveLogDir("parking") + "/parkingData_" + std::to_string(fileCounter++) + ".csv";
-    std::ofstream myfile(filename);
-    logger.info("file saved") << "filecount: " << fileCounter << ", vectorSize: " << xPosition.size();
-    for (int i = 0; i < xPosition.size(); ++i)
-    {
-        myfile << xPosition.at(i) << "," << distanceMeasurement.at(i) << "," << distanceMeasurement2.at(i) <<std::endl;
+    if(isEnableSave()){
+        const std::string filename = saveLogDir("parking") + "/parkingData_" + std::to_string(fileCounter++) + ".csv";
+        std::ofstream myfile(filename);
+        logger.info("file saved") << "filecount: " << fileCounter << ", vectorSize: " << xPosition.size();
+        for (int i = 0; i < xPosition.size(); ++i)
+        {
+            myfile << xPosition.at(i) << "," << distanceMeasurement.at(i) << "," << distanceMeasurement2.at(i) <<std::endl;
+        }
+        myfile.flush();
+        myfile.close();
     }
-    myfile.flush();
-    myfile.close();
 
     //reset data vectors
     distanceMeasurement.clear();
@@ -64,24 +66,15 @@ bool Parking::deinitialize() {
 }
 
 bool Parking::cycle() {
+    lms::ServiceHandle<phoenix_CC2016_service> phoenixService= getService<phoenix_CC2016_service::Phoenix_CC2016Service>("PHOENIX_SERVICE");
 
-    if(getService<phoenix_CC2016_service::Phoenix_CC2016Service>("PHOENIX_SERVICE")->driveMode() != phoenix_CC2016_service::CCDriveMode::PARKING){
+    if((phoenixService->driveMode() != phoenix_CC2016_service::CCDriveMode::PARKING)|| phoenixService->rcStateChanged()){
         //TODO remove parking car-control-state
-        return true;
-    }
-
-    if(getService<phoenix_CC2016_service::Phoenix_CC2016Service>("PHOENIX_SERVICE")->rcStateChanged()){
-        /*distanceMeasurement.clear();
-        distanceMeasurement.shrink_to_fit();
-        xPosition.clear();
-        xPosition.shrink_to_fit();
-        edgePosition.clear();
-        edgePosition.shrink_to_fit();
-        edgeType.clear();
-        edgeType.shrink_to_fit();*/
+        car->removeState("PARKING");
         deinitialize();
         initialize();
-        logger.error("reset parking");
+        logger.info("reset parking");
+        return true;
     }
 
     ++cycleCounter;
@@ -137,6 +130,7 @@ bool Parking::cycle() {
         break;       
     }
 
+    //Anhalten nach Searching
     case ParkingState::STOPPING:
     {
 
@@ -170,6 +164,7 @@ bool Parking::cycle() {
         break;
     }
 
+    //Wir fahren in die Parklücke
     case ParkingState::ENTERING:
     {
 
@@ -263,7 +258,7 @@ bool Parking::cycle() {
 
         std::vector<float> correctingDistances = config().getArray<float>("correctingDistances");
 
-        if (correctingCounter == correctingDistances.size())
+        if (correctingCounter >= correctingDistances.size())
         {
             currentState = ParkingState::FINISHED;
         }
