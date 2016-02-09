@@ -93,6 +93,12 @@ bool Parking::cycle() {
     case ParkingState::SEARCHING:
     {
 
+        if (car->velocity() > 0.3)
+        {
+            //update current x-position, distance measurement vector and x-position vector
+            updatePositionAndDistance();
+        }
+
         state.indicatorLeft = false;
         state.indicatorRight = false;
 
@@ -108,10 +114,7 @@ bool Parking::cycle() {
 
          /***************************************************
          * process lidar measurements and detect a valid parking space
-         ***************************************************/
-
-        //update current x-position, distance measurement vector and x-position vector
-        updatePositionAndDistance();
+         ***************************************************/        
 
         //find the x-positions of big enough "jumps" in distance measurements
         Parking::findEdges();
