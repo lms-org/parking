@@ -70,10 +70,12 @@ bool Parking::deinitialize() {
 bool Parking::cycle() {
     lms::ServiceHandle<phoenix_CC2016_service::Phoenix_CC2016Service> phoenixService= getService<phoenix_CC2016_service::Phoenix_CC2016Service>("PHOENIX_SERVICE");
     if((phoenixService->driveMode() != phoenix_CC2016_service::CCDriveMode::PARKING)|| phoenixService->rcStateChanged()){
-        //remove parking car-control-state
+        //remove parking car-control-state       
         car->removeState("PARKING");
         deinitialize();
         initialize();
+        state.indicatorLeft = false;
+        state.indicatorRight = false;
         logger.info("reset parking");
         return true;
     }
