@@ -42,7 +42,7 @@ bool Parking::initialize() {
 
 bool Parking::deinitialize() {
     //myfile.open("parkingData.csv");
-    if(isEnableSave()){
+    if(isEnableSave() && xPosition.size() > 0){
         const std::string filename = saveLogDir("parking") + "/parkingData_" + std::to_string(fileCounter++) + ".csv";
         std::ofstream myfile(filename);
         logger.info("file saved") << "filecount: " << fileCounter << ", vectorSize: " << xPosition.size();
