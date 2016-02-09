@@ -94,6 +94,9 @@ bool Parking::cycle() {
     case ParkingState::SEARCHING:
     {
 
+        state.indicatorLeft = false;
+        state.indicatorRight = false;
+
          /***************************************************
          * drive straight along the middle of the right lane
          ***************************************************/
@@ -171,6 +174,7 @@ bool Parking::cycle() {
     case ParkingState::ENTERING:
     {
 
+        state.indicatorLeft = false;
         state.indicatorRight = true;
 
         updatePositionFromHall();
@@ -260,6 +264,8 @@ bool Parking::cycle() {
     }
     case ParkingState::CORRECTING:
     {
+        state.indicatorLeft = false;
+        state.indicatorRight = false;
 
         updatePositionFromHall();
 
@@ -276,7 +282,7 @@ bool Parking::cycle() {
             if (correctingCounter%2 == 0) //forward
             {
                 state.targetSpeed = config().get<float>("velocityCorrecting", 0.5);
-                setSteeringAngles(-0.29, 0.0, 0.0, 6.0*phi_ist, DrivingMode::FORWARD);
+                setSteeringAngles(-0.29, 0.0, 0.0, -6.0*phi_ist, DrivingMode::FORWARD);
 
                 if (currentXPosition >= correctingDistances.at(correctingCounter))
                 {
@@ -288,7 +294,7 @@ bool Parking::cycle() {
             else //backwards
             {
                 state.targetSpeed = -config().get<float>("velocityCorrecting", 0.5);
-                setSteeringAngles(-0.29, 0.0, 0.0, 6.0*phi_ist, DrivingMode::BACKWARDS);
+                setSteeringAngles(-0.29, 0.0, 0.0, -6.0*phi_ist, DrivingMode::BACKWARDS);
 
                 if (-currentXPosition >= correctingDistances.at(correctingCounter))
                 {
@@ -308,8 +314,8 @@ bool Parking::cycle() {
         state.steering_front = 0.0;
         state.steering_rear = 0.0;
 
-        state.indicatorLeft = false;
-        state.indicatorRight = false;
+        state.indicatorLeft = true;
+        state.indicatorRight = true;
 
         break;
     }
@@ -331,8 +337,6 @@ bool Parking::cycle() {
     }
 
     }
-
-    state.indicatorRight = true;
 
 
     car->putState(state);
