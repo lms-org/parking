@@ -17,6 +17,7 @@ bool Parking::initialize() {
     straightMove = false;
     correctingCounter = 0;
     yawAngleSet = false;
+    finishCounter = 0;
 
 
     state.priority = 100;
@@ -202,7 +203,9 @@ bool Parking::cycle() {
 
         if (currentXPosition > x_begin_steering) //drive straight backwards
         {
-            setSteeringAngles(-0.2, config().get<float>("searchingPhiFactor"), DrivingMode::BACKWARDS);
+            //setSteeringAngles(-0.2, config().get<float>("searchingPhiFactor"), DrivingMode::BACKWARDS);
+            state.steering_front = 0.0;
+            state.steering_rear = 0.0;
 
             double brakingDistance = config().get<float>("brakingDistanceUntilSteering", 0.15);
             //TODO evtl
@@ -280,7 +283,9 @@ bool Parking::cycle() {
             if (correctingCounter%2 == 0) //forward
             {
                 state.targetSpeed = config().get<float>("velocityCorrecting", 0.5);
-                setSteeringAngles(-0.29, 0.0, 0.0, -6.0*phi_ist, DrivingMode::FORWARD);
+                setSteeringAngles(-0.29, 0.0, 0.0, 8.0*phi_ist, DrivingMode::FORWARD);
+
+                logger.error("forward Correcting");
 
                 if (currentXPosition >= correctingDistances.at(correctingCounter))
                 {
@@ -292,7 +297,9 @@ bool Parking::cycle() {
             else //backwards
             {
                 state.targetSpeed = -config().get<float>("velocityCorrecting", 0.5);
-                setSteeringAngles(-0.29, 0.0, 0.0, -6.0*phi_ist, DrivingMode::BACKWARDS);
+                setSteeringAngles(-0.29, 0.0, 0.0, 8.0*phi_ist, DrivingMode::BACKWARDS);
+
+                logger.error("backwards Correcting");
 
                 if (-currentXPosition >= correctingDistances.at(correctingCounter))
                 {
@@ -312,8 +319,19 @@ bool Parking::cycle() {
         state.steering_front = 0.0;
         state.steering_rear = 0.0;
 
-        state.indicatorLeft = true;
-        state.indicatorRight = true;
+        if (finishCounter > 10)
+        {
+            state.indicatorLeft = false;
+            state.indicatorRight = false;
+        }
+        else
+        {
+            state.indicatorLeft = true;
+            state.indicatorRight = true;
+        }
+
+        ++finishCounter;
+
 
         break;
     }
@@ -625,8 +643,8 @@ void Parking::setSteeringAngles(double y_soll, double phi_soll, int drivingMode)
     //eigenvalues [-2, -2]
     double R_forward[] = {2.000, 1.420, 2.000, 1.000};
     double F_forward[] = {2.000, 0.420, 2.000, 0.000};
-    double R_backwards[] = {-6.000, -0.260, -6.000, 1.000};
-    double F_backwards[] = {-6.000, -1.260, -6.000, 0.000};
+    double R_backwards[] = {-2.000, 0.580, -2.000, 1.000};
+    double F_backwards[] = {-2.000, -0.420, -2.000, 0.000};
 
     //find regression line y=mx+b through some points of the middle lane (not necessary but contributes to better stability in straight line performance)
     double m, b;

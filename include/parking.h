@@ -53,6 +53,7 @@ public:
     lms::Time timeSpaceWasFound;
     bool straightMove;
     bool yawAngleSet;
+    int finishCounter;
 
     sensor_utils::Car::State state;
     double car_yawAngle, car_velocity, car_xPosition;
