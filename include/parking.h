@@ -19,12 +19,10 @@ public:
     bool initialize();
     bool deinitialize();
     bool cycle();
-    Parking(): fileCounter(0) {};
+    Parking(): fileCounter(0) {}
 
-    void updateYawAngle();
     void updatePositionAndDistance();
     void updatePositionFromHall();
-    void updateVelocity();
 
     void findEdges();
     void fitLineToMiddleLane(double *oM, double *oB);
@@ -34,7 +32,7 @@ public:
     double getDistanceToMiddleLane();
 
     lms::ReadDataChannel<sensor_utils::SensorContainer> sensors;
-    lms::WriteDataChannel<sensor_utils::Car> car;
+    lms::WriteDataChannel<street_environment::Car> car;
     lms::ReadDataChannel<Mavlink::Data> mavlinkChannel;
 
     int cycleCounter;
@@ -55,8 +53,8 @@ public:
     bool yawAngleSet;
     int finishCounter;
 
-    sensor_utils::Car::State state;
-    double car_yawAngle, car_velocity, car_xPosition;
+    street_environment::Car::State state;
+    double car_yawAngle, car_xPosition;
     double yawAngleStartEntering;
     int correctingCounter;
 

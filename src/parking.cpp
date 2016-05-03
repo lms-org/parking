@@ -8,7 +8,6 @@ bool Parking::initialize() {
     cycleCounter = 0;
     numEdges = 0;
     car_yawAngle = 0.0;
-    car_velocity = 0.0;
     car_xPosition = 0.0;
     yawAngleStartEntering = 0.0;
     endX = 0.0;
@@ -29,7 +28,7 @@ bool Parking::initialize() {
 
     mavlinkChannel = readChannel<Mavlink::Data>("MAVLINK_IN");
     sensors = readChannel<sensor_utils::SensorContainer>("SENSORS");
-    car = writeChannel<sensor_utils::Car>("CAR");
+    car = writeChannel<street_environment::Car>("CAR");
 
     currentXPosition = 0;
     lastTimeStamp = -1;
@@ -47,7 +46,7 @@ bool Parking::deinitialize() {
         const std::string filename = saveLogDir("parking") + "/parkingData_" + std::to_string(fileCounter++) + ".csv";
         std::ofstream myfile(filename);
         logger.info("file saved") << "filecount: " << fileCounter << ", vectorSize: " << xPosition.size();
-        for (int i = 0; i < xPosition.size(); ++i)
+        for (int i = 0; i < (int)xPosition.size(); ++i)
         {
             myfile << xPosition.at(i) << "," << distanceMeasurement.at(i) << "," << distanceMeasurement2.at(i) <<std::endl;
         }
@@ -84,8 +83,7 @@ bool Parking::cycle() {
 
     if (cycleCounter > 10)
     {
-        updateYawAngle();
-        updateVelocity();       
+        car_yawAngle += car->deltaPhi();
     }
 
 
@@ -277,7 +275,7 @@ bool Parking::cycle() {
 
         std::vector<float> correctingDistances = config().getArray<float>("correctingDistances");
 
-        if (correctingCounter >= correctingDistances.size())
+        if (correctingCounter >= (int)correctingDistances.size())
         {
             currentState = ParkingState::FINISHED;
         }
@@ -475,7 +473,7 @@ void Parking::updatePositionAndDistance()
             }
 
             int medianSize = config().get<int>("medianFilterSize", 3);
-            if (distanceMeasurement.size() >= medianSize && medianSize > 0) //median filter the last elements
+            if ((int)distanceMeasurement.size() >= medianSize && medianSize > 0) //median filter the last elements
             {
                 std::nth_element(distanceMeasurement.end()-medianSize, distanceMeasurement.end()-ceil(medianSize/2.0), distanceMeasurement.end());
             }
@@ -488,7 +486,7 @@ void Parking::updatePositionAndDistance()
                 lastTimeStamp = distanceMsg.timestamp;
             }
             else {
-                currentXPosition += car_velocity*(distanceMsg.timestamp - lastTimeStamp)/1000000.0; //update x-position (timestamp is in us)
+                currentXPosition += car->velocity()*(distanceMsg.timestamp - lastTimeStamp)/1000000.0; //update x-position (timestamp is in us)
                 lastTimeStamp = distanceMsg.timestamp; //update timestamp
                 xPosition.push_back(currentXPosition); //add x-position to the position vector
             }
@@ -507,69 +505,6 @@ void Parking::updatePositionFromHall()
     }
 }
 
-void Parking::updateYawAngle()
-{
-    //upate from ego estimator
-    car_yawAngle += car->deltaPhi();
-
-    //old function using raw measurements
-    /*double yawRate = 0.0;
-    int yawCount = 0;
-    for( const auto& msg : *mavlinkChannel )
-    {
-        if (msg.msgid == MAVLINK_MSG_ID_IMU && cycleCounter > 5) {
-            mavlink_imu_t imuMessage;
-            mavlink_msg_imu_decode(&msg, &imuMessage);
-            double offset = 0.0299405;
-            yawRate += imuMessage.zgyro-offset;
-            ++yawCount;
-            if (lastImuTimeStamp < 0) {
-                lastImuTimeStamp = imuMessage.timestamp;
-            }
-            else {
-                //double yawAngleDiffGrad = 10*(imuMessage.zgyro-offset)*(imuMessage.timestamp - lastTimeStamp)/1000000.0;
-                //car_yawAngle += yawAngleDiffGrad*M_PI/180.0;
-                //car_yawAngle += (imuMessage.zgyro-offset)*(imuMessage.timestamp - lastTimeStamp)/1000000.0;
-                lastImuTimeStamp = imuMessage.timestamp;
-            }
-            //logger.debug("car_yawAngle") << car_yawAngle;
-        }
-    }
-    if (yawCount > 0) yawRate /= yawCount;
-    car_yawAngle += 0.01*yawRate;*/
-
-    return;
-}
-
-
-void Parking::updateVelocity()
-{
-    car_velocity = car->velocity();
-    /*if(sensors->hasSensor("HALL")) {
-        auto hall = sensors->sensor<sensor_utils::Odometer>("HALL");
-        car_velocity = hall->velocity.x();
-    }*/
-    return;
-
-    //old function using raw measurements
-    /*car_velocity = 0.0;
-    int velCount = 0;
-
-    for( const auto& msg : *mavlinkChannel )
-    {
-        if (msg.msgid == MAVLINK_MSG_ID_ODOMETER_DELTA) {
-            mavlink_odometer_delta_t velocityMesage;
-            mavlink_msg_odometer_delta_decode(&msg, &velocityMesage);
-            if (msg.compid == 0) { //0 = Hall
-               car_velocity += velocityMesage.xvelocity;
-               ++velCount;
-            }
-        }
-    }
-    if (velCount > 0) car_velocity /= velCount; //average velocity in one timestep of the framework
-    */
-}
-
 void Parking::fitLineToMiddleLane(double *oM, double *oB)
 {
     //get points from middle lane
@@ -577,7 +512,7 @@ void Parking::fitLineToMiddleLane(double *oM, double *oB)
     std::vector<double> iX;
     std::vector<double> iY;
 
-    for (uint i=config().get<int>("lineFitStartPoint", 2); i<=config().get<int>("lineFitEndPoint", 5); ++i) //get points 1 to 4
+    for (int i=config().get<int>("lineFitStartPoint", 2); i<=config().get<int>("lineFitEndPoint", 5); ++i) //get points 1 to 4
     {
         iX.push_back(middleLane.points().at(i).x);
         iY.push_back(middleLane.points().at(i).y);
@@ -617,7 +552,7 @@ bool Parking::findValidParkingSpace(double sizeMin, double sizeMax)
 {
     bool spaceStarted = false;
     double size;
-    for (int i=0; i < numEdges; ++i)
+    for (uint i=0; i < numEdges; ++i)
     {
         if (edgeType.at(i) == -1)
         {
