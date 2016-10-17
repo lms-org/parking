@@ -23,4 +23,4 @@ include_directories(include)
 
 include_directories(include)
 add_library(parking MODULE ${SOURCES} ${HEADERS})
-target_link_libraries(parking PRIVATE lmscore street_environment phoenix_CC2016_service sensor_utils local_course)
+target_link_libraries(parking PRIVATE lmscore street_environment phoenix_CC2016_service lms_sensor_utils local_course)
