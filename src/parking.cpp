@@ -75,7 +75,7 @@ bool Parking::cycle() {
         initialize();
         state.indicatorLeft = false;
         state.indicatorRight = false;
-        logger.info("reset parking");
+        logger.debug("reset parking");
         return true;
     }
 
