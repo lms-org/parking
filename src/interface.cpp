@@ -1,7 +1,5 @@
 #include "parking.h"
 
-extern "C" {
-void* getInstance () {
-    return new Parking();
-}
-}
+LMS_EXPORT_BEGIN
+LMS_EXPORT_MODULE(Parking)
+LMS_EXPORT_END

@@ -30,7 +30,6 @@ public:
     bool initialize();
     bool deinitialize();
     bool cycle();
-    Parking();
 
     bool checkForGap();
     void updatePositionFromHall();
