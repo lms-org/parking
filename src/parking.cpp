@@ -28,7 +28,7 @@ bool Parking::initialize() {
 
     mavlinkChannel = readChannel<Mavlink::Data>("MAVLINK_IN");
     sensors = readChannel<sensor_utils::SensorContainer>("SENSORS");
-    car = writeChannel<street_environment::Car>("CAR");
+    car = writeChannel<street_environment::CarCommand>("CAR");
 
     currentXPosition = 0;
     lastTimeStamp = -1;

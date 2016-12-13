@@ -32,7 +32,7 @@ public:
     double getDistanceToMiddleLane();
 
     lms::ReadDataChannel<sensor_utils::SensorContainer> sensors;
-    lms::WriteDataChannel<street_environment::Car> car;
+    lms::WriteDataChannel<street_environment::CarCommand> car;
     lms::ReadDataChannel<Mavlink::Data> mavlinkChannel;
 
     int cycleCounter;
@@ -53,7 +53,7 @@ public:
     bool yawAngleSet;
     int finishCounter;
 
-    street_environment::Car::State state;
+    street_environment::CarCommand::State state;
     double car_yawAngle, car_xPosition;
     double yawAngleStartEntering;
     int correctingCounter;
