@@ -137,21 +137,21 @@ bool Parking::cycle() {
         /***************************************************
         * calculate parameters for entering maneuver
         ***************************************************/
-        double lr = config().get<float>("wheelbase", 0.21); //Radstand
-        double l = config().get<float>("carLength", 0.32);  //Fahrzeuglänge
-        double b = config().get<float>("carWidth", 0.2); //Fahrzeugbreite
-        double delta_max = config().get("maxSteeringAngle", 24)*M_PI/180; //maximum steering angle
-        double k = config().get<float>("k", 0.03); //Sicherheitsabstand zur Ecke der 2. Box
-        double d = config().get<float>("d", 0.05); //Sicherheitsabstand zur 1. Box im eingeparkten Zustand
-        double y0 = config().get<float>("y0_worstCase", 0.24); //seitlicher Abstand zur zweiten Box
+        const double lr = config().get<float>("wheelbase", 0.21); //Radstand
+        const double l = config().get<float>("carLength", 0.32);  //Fahrzeuglänge
+        const double b = config().get<float>("carWidth", 0.2); //Fahrzeugbreite
+        const double delta_max = config().get("maxSteeringAngle", 24)*M_PI/180; //maximum steering angle
+        const double k = config().get<float>("k", 0.03); //Sicherheitsabstand zur Ecke der 2. Box
+        const double d = config().get<float>("d", 0.05); //Sicherheitsabstand zur 1. Box im eingeparkten Zustand
+        const double y0 = config().get<float>("y0_worstCase", 0.24); //seitlicher Abstand zur zweiten Box
 
         //TODO delta_max + 1*pi/180;
-        double r = lr/2*tan(M_PI/2 - (delta_max-1*M_PI/180)); //Radius des Wendekreises (bezogen auf den Fahrzeugmittelpunkt) bei Volleinschlag beider Achsen
-        double R = sqrt(l*l/4 + (r+b/2)*(r+b/2)); //Radius den das äußerste Eck des Fahrzeugs bei volleingeschlagenen Rädern zurücklegt
-        double s = sqrt((R+k)*(R+k) - (parkingSpaceSize - d - l/2)*(parkingSpaceSize - d - l/2));
-        double alpha = acos((r-y0+s)/(2*r)); //Winkel (in rad) der 2 Kreisboegen, die zum einfahren genutzt werden
-        double x0 = d + l/2 + 2*r*sin(alpha) - parkingSpaceSize; //Abstand vom Ende der 2. Box zur Mitte des Fahrzeugs bei Lenkbeginn (Anfang erster Kreisbogen)
-        double x_begin_steering = config().get<float>("xDistanceCorrection",0.09) + endX + x0 - config().get<float>("distanceMidLidarX", 0.09);
+        const double r = lr/2*tan(M_PI/2 - (delta_max-1*M_PI/180)); //Radius des Wendekreises (bezogen auf den Fahrzeugmittelpunkt) bei Volleinschlag beider Achsen
+        const double R = sqrt(l*l/4 + (r+b/2)*(r+b/2)); //Radius den das äußerste Eck des Fahrzeugs bei volleingeschlagenen Rädern zurücklegt
+        const double s = sqrt((R+k)*(R+k) - (parkingSpaceSize - d - l/2)*(parkingSpaceSize - d - l/2));
+        const double alpha = acos((r-y0+s)/(2*r)); //Winkel (in rad) der 2 Kreisboegen, die zum einfahren genutzt werden
+        const double x0 = d + l/2 + 2*r*sin(alpha) - parkingSpaceSize; //Abstand vom Ende der 2. Box zur Mitte des Fahrzeugs bei Lenkbeginn (Anfang erster Kreisbogen)
+        const double x_begin_steering = config().get<float>("xDistanceCorrection",0.09) + endX + x0 - config().get<float>("distanceMidLidarX", 0.09);
 
         if (currentXPosition > x_begin_steering) //drive straight backwards
         {
