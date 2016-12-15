@@ -40,7 +40,7 @@ public:
     double getDistanceToMiddleLane();
 
     lms::ReadDataChannel<sensor_utils::SensorContainer> sensors;
-    lms::WriteDataChannel<street_environment::Car> car;
+    lms::WriteDataChannel<street_environment::CarCommand> car;
 
     ParkingState currentState;
     bool firstCircleArc;
