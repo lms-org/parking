@@ -13,6 +13,7 @@
 #include <sensor_utils/sensor.h>
 #include <sensor_utils/odometer.h>
 #include <sensor_utils/parking_sensor.h>
+#include <lms/math/point_cloud.h>
 
 
 class Parking : public lms::Module {
@@ -41,6 +42,7 @@ public:
 
     lms::ReadDataChannel<sensor_utils::SensorContainer> sensors;
     lms::WriteDataChannel<street_environment::CarCommand> car;
+    lms::WriteDataChannel<lms::math::PointCloud2f> laser_data;
 
     ParkingState currentState;
     bool firstCircleArc;

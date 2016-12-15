@@ -26,6 +26,7 @@ bool Parking::initialize() {
 
     sensors = readChannel<sensor_utils::SensorContainer>("SENSORS");
     car = writeChannel<street_environment::CarCommand>("CAR");
+    laser_data = writeChannel<lms::math::PointCloud2f>("HOKUYO_LIDAR_DATA");
 
     currentXPosition = 0;
     lastTimeStamp = -1;
@@ -42,7 +43,13 @@ bool Parking::deinitialize() {
 
 bool Parking::cycle() {
     lms::ServiceHandle<phoenix_CC2016_service::Phoenix_CC2016Service> phoenixService = getService<phoenix_CC2016_service::Phoenix_CC2016Service>("PHOENIX_SERVICE");
-    
+
+    float distanceToObstacleFront = 0;
+    bool validDistanceToObstacleFront = false;
+    if(laser_data->points().size() > 0){
+        validDistanceToObstacleFront = true;
+        distanceToObstacleFront = laser_data->points()[laser_data->points().size()/2].x;
+    }
 
     logger.info("[PARKING]") << "drive mode: " << static_cast<int>(phoenixService->driveMode());
      if((phoenixService->driveMode() != phoenix_CC2016_service::CCDriveMode::PARKING)|| phoenixService->rcStateChanged()){
@@ -238,7 +245,11 @@ bool Parking::cycle() {
                 setSteeringAngles(-0.29, 0.0, 0.0, 8.0*phi_ist, DrivingMode::FORWARD);
 
                 logger.error("forward Correcting");
-
+                //mit dem lidar den Frontabstand Messen
+                float correctingDistance = correctingDistances.at(correctingCounter);
+                if(validDistanceToObstacleFront){
+                    correctingDistance = distanceToObstacleFront-0.25; //TODO
+                }
                 if (currentXPosition >= correctingDistances.at(correctingCounter))
                 {
                     ++correctingCounter;
@@ -252,6 +263,10 @@ bool Parking::cycle() {
                 setSteeringAngles(-0.29, 0.0, 0.0, 8.0*phi_ist, DrivingMode::BACKWARDS);
 
                 logger.error("backwards Correcting");
+                float correctingDistance = correctingDistances.at(correctingCounter);
+                if(validDistanceToObstacleFront){
+                    correctingDistance = 53-distanceToObstacleFront-5; //TODO
+                }
 
                 if (-currentXPosition >= correctingDistances.at(correctingCounter))
                 {
