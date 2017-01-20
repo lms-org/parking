@@ -42,27 +42,29 @@ bool Parking::deinitialize() {
 }
 
 bool Parking::cycle() {
-    lms::ServiceHandle<phoenix_CC2016_service::Phoenix_CC2016Service> phoenixService = getService<phoenix_CC2016_service::Phoenix_CC2016Service>("PHOENIX_SERVICE");
-
+    {
+        lms::ServiceHandle<phoenix_CC2016_service::Phoenix_CC2016Service> phoenixService = getService<phoenix_CC2016_service::Phoenix_CC2016Service>("PHOENIX_SERVICE");
+        logger.info("[PARKING]") << "drive mode: " << static_cast<int>(phoenixService->driveMode());
+         if((phoenixService->driveMode() != phoenix_CC2016_service::CCDriveMode::PARKING)|| phoenixService->rcStateChanged()){
+            //remove parking car-control-state
+            car->removeState("PARKING");
+            deinitialize();
+            initialize();
+            state.indicatorLeft = false;
+            state.indicatorRight = false;
+            logger.debug("reset parking");
+            return true;
+        }
+    }
+    logger.info("parking");
     float distanceToObstacleFront = 0;
     bool validDistanceToObstacleFront = false;
     if(laser_data->points().size() > 0){
         validDistanceToObstacleFront = true;
         distanceToObstacleFront = laser_data->points()[laser_data->points().size()/2].x;
-    }
+    }else{
 
-    logger.info("[PARKING]") << "drive mode: " << static_cast<int>(phoenixService->driveMode());
-     if((phoenixService->driveMode() != phoenix_CC2016_service::CCDriveMode::PARKING)|| phoenixService->rcStateChanged()){
-        //remove parking car-control-state
-        car->removeState("PARKING");
-        deinitialize();
-        initialize();
-        state.indicatorLeft = false;
-        state.indicatorRight = false;
-        logger.debug("reset parking");
-        return true;
     }
-    logger.info("test parking");
 
     switch (currentState)
     {
