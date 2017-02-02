@@ -267,6 +267,8 @@ bool Parking::cycle() {
                     logger.debug("distanceToObstacleFront")<<distanceToObstacleFront;
                     correctingDistance = distanceToObstacleFront-0.25; //TODO
                     logger.debug("correctingDistance")<<correctingDistance<<" currentXPosition "<<currentXPosition;
+                }else{
+                    logger.debug("no validDistanceToObstacleFront found")<<distanceToObstacleFront;
                 }
                 if (currentXPosition >= correctingDistance)
                 {
@@ -287,7 +289,7 @@ bool Parking::cycle() {
                     correctingDistance = 53-distanceToObstacleFront-5; //TODO
                     logger.debug("correctingDistance")<<correctingDistance;
                 }else{
-                    logger.debug("no validDistanceToObstacleFront found");
+                    logger.debug("no validDistanceToObstacleFront found")<<distanceToObstacleFront;
                 }
 
                 if (-currentXPosition >= correctingDistance)
