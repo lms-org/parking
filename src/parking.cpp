@@ -177,13 +177,13 @@ bool Parking::cycle() {
         const double alpha = acos((r-y0+s)/(2*r)); //Winkel (in rad) der 2 Kreisboegen, die zum einfahren genutzt werden
         const double x0 = d + l/2 + 2*r*sin(alpha) - parkingSpaceSize; //Abstand vom Ende der 2. Box zur Mitte des Fahrzeugs bei Lenkbeginn (Anfang erster Kreisbogen)
         const double x_begin_steering = config().get<float>("xDistanceCorrection",0.09) + endX + x0 - config().get<float>("distanceMidLidarX", 0.09);
-
-        if (currentXPosition > x_begin_steering) //drive straight backwards
-        {
+        //drive straight backwards
+        if (currentXPosition > x_begin_steering){
+            logger.debug("Driving straight backwards");
             //setSteeringAngles(-0.2, config().get<float>("searchingPhiFactor"), DrivingMode::BACKWARDS);
             state.steering_front = 0.0;
             state.steering_rear = 0.0;
-
+            /*
             double brakingDistance = config().get<float>("brakingDistanceUntilSteering", 0.15);
             //TODO evtl
             if (false && currentXPosition < x_begin_steering + brakingDistance)
@@ -194,13 +194,12 @@ bool Parking::cycle() {
                         +  (1.0-deltaX/brakingDistance) * deltaV;
             }
             else
-            {
-                state.targetSpeed = -config().get<float>("velocityApproaching", 0.5);
-            }
+            { */
+            state.targetSpeed = -config().get<float>("velocityApproaching", 0.5);
+            //}
 
-        }
-        else //begin steering into parking space
-        {
+        }else{
+             //begin steering into parking space
             state.targetSpeed = -config().get<float>("velocityEntering", 0.5);
 
             if (! yawAngleSet)
@@ -258,46 +257,51 @@ bool Parking::cycle() {
             if (correctingCounter%2 == 0) //forward
             {
                 state.targetSpeed = config().get<float>("velocityCorrecting", 0.5);
-                setSteeringAngles(-0.29, 0.0, 0.0, 8.0*phi_ist, DrivingMode::FORWARD);
+                setSteeringAngles(-0.29, 0.0, 0.0, 0.0*phi_ist, DrivingMode::FORWARD);
 
                 logger.error("forward Correcting");
                 //mit dem lidar den Frontabstand Messen
                 float correctingDistance = correctingDistances.at(correctingCounter);
                 if(validDistanceToObstacleFront){
                     logger.debug("distanceToObstacleFront")<<distanceToObstacleFront;
-                    correctingDistance = distanceToObstacleFront-0.25; //TODO
+                    correctingDistance = distanceToObstacleFront-config().get<float>("distanceToObstacleFront",0.28);
                     logger.debug("correctingDistance")<<correctingDistance<<" currentXPosition "<<currentXPosition;
+                    if(correctingDistance < 0){
+                        correctingCounter++;
+                        currentXPosition = 0.0;
+                    }
                 }else{
                     logger.debug("no validDistanceToObstacleFront found")<<distanceToObstacleFront;
-                }
-                if (currentXPosition >= correctingDistance)
-                {
-                    ++correctingCounter;
-                    currentXPosition = 0.0;
+                    if (currentXPosition >= correctingDistance){
+                        ++correctingCounter;
+                        currentXPosition = 0.0;
+                    }
                 }
 
             }
             else //backwards
             {
                 state.targetSpeed = -config().get<float>("velocityCorrecting", 0.5);
-                setSteeringAngles(-0.29, 0.0, 0.0, 8.0*phi_ist, DrivingMode::BACKWARDS);
+                setSteeringAngles(-0.29, 0.0, 0.0, 0.0*phi_ist, DrivingMode::BACKWARDS);
 
                 logger.error("backwards Correcting");
                 float correctingDistance = correctingDistances.at(correctingCounter);
                 if(validDistanceToObstacleFront){
                     logger.debug("distanceToObstacleFront")<<distanceToObstacleFront;
-                    correctingDistance = 53-distanceToObstacleFront-5; //TODO
-                    logger.debug("correctingDistance")<<correctingDistance;
+                    correctingDistance = 0.53-distanceToObstacleFront-config().get<float>("distanceToObstacleRear",0.1);
+                    logger.debug("correctingDistance")<<correctingDistance<<" currentXPosition "<<currentXPosition;
+                    if(correctingDistance < 0){
+                        correctingCounter++;
+                        currentXPosition = 0.0;
+                    }
                 }else{
                     logger.debug("no validDistanceToObstacleFront found")<<distanceToObstacleFront;
+                    if (-currentXPosition >= correctingDistance)
+                    {
+                        ++correctingCounter;
+                        currentXPosition = 0.0;
+                    }
                 }
-
-                if (-currentXPosition >= correctingDistance)
-                {
-                    ++correctingCounter;
-                    currentXPosition = 0.0;
-                }
-
             }
 
         }
@@ -361,8 +365,8 @@ bool Parking::checkForGap()
 
 void Parking::updatePositionFromHall()
 {
-    if(sensors->hasSensor("HALL_0")) {
-        auto hall = sensors->sensor<sensor_utils::Odometer>("HALL_0");
+    if(sensors->hasSensor("HALL")) {
+        auto hall = sensors->sensor<sensor_utils::Odometer>("HALL");
         auto dst = hall->distance.x();
         currentXPosition += dst;
     }else{
