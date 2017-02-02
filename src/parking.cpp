@@ -76,9 +76,6 @@ bool Parking::cycle() {
         if(smallestDistance < 0.5){
             validDistanceToObstacleFront = true;
             distanceToObstacleFront = smallestDistance;
-            logger.debug("distanceToObstacleFront")<<distanceToObstacleFront;
-        }else{
-            logger.debug("no obstacle in front with the lidar found")<<smallestDistance;
         }
     }else{
         logger.warn("no lidar data given!");
@@ -267,7 +264,9 @@ bool Parking::cycle() {
                 //mit dem lidar den Frontabstand Messen
                 float correctingDistance = correctingDistances.at(correctingCounter);
                 if(validDistanceToObstacleFront){
+                    logger.debug("distanceToObstacleFront")<<distanceToObstacleFront;
                     correctingDistance = distanceToObstacleFront-0.25; //TODO
+                    logger.debug("correctingDistance")<<correctingDistance;
                 }
                 if (currentXPosition >= correctingDistances.at(correctingCounter))
                 {
@@ -284,7 +283,9 @@ bool Parking::cycle() {
                 logger.error("backwards Correcting");
                 float correctingDistance = correctingDistances.at(correctingCounter);
                 if(validDistanceToObstacleFront){
+                    logger.debug("distanceToObstacleFront")<<distanceToObstacleFront;
                     correctingDistance = 53-distanceToObstacleFront-5; //TODO
+                    logger.debug("correctingDistance")<<correctingDistance;
                 }
 
                 if (-currentXPosition >= correctingDistances.at(correctingCounter))
