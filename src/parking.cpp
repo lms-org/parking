@@ -67,7 +67,7 @@ bool Parking::cycle() {
     if(laser_data->points().size() > 0){
         float smallestDistance = 100;
         for(const lms::math::vertex2f &v: laser_data->points()){
-            if(std::fabs(v.angle()) < 30*M_PI/180){
+            if(std::fabs(v.angle()) < config().get<float>("obstacleDetectionAngle",30)*M_PI/180){
                 if(v.length() < smallestDistance){
                     smallestDistance = v.length();//TODO median
                 }
