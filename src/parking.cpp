@@ -316,7 +316,7 @@ bool Parking::cycle() {
 
 bool Parking::checkForGap()
 {
-    if(sensors->hasSensor("PARKINGLOT_" + std::to_string(MAVLINK_MSG_ID_PARKING_LOT))){
+    if(sensors->hasSensor("PARKINGLOT_" + std::to_string(0))){
         auto parking = sensors->sensor<sensor_utils::ParkingSensor>("ParkingLot");
         auto size = parking->size;
 
