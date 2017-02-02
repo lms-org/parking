@@ -15,6 +15,7 @@ bool Parking::initialize() {
     correctingCounter = 0;
     yawAngleSet = false;
     finishCounter = 0;
+    m_cycleCounter = 0;
 
 
     state.priority = 100;
@@ -40,7 +41,6 @@ bool Parking::deinitialize() {
 
     return true;
 }
-
 bool Parking::cycle() {
     {
         lms::ServiceHandle<phoenix_CC2016_service::Phoenix_CC2016Service> phoenixService = getService<phoenix_CC2016_service::Phoenix_CC2016Service>("PHOENIX_SERVICE");
@@ -56,6 +56,11 @@ bool Parking::cycle() {
             return true;
         }
     }
+
+    if(m_cycleCounter> 10){
+        car_yawAngle += car->deltaPhi();
+    }
+    m_cycleCounter++;
     logger.info("parking");
     float distanceToObstacleFront = 0;
     bool validDistanceToObstacleFront = false;

@@ -61,6 +61,9 @@ public:
     double posXGap;
     double parkingSpaceSize;
 
+    //hack
+    int m_cycleCounter;
+
 };
 
 #endif // PARKING_H
