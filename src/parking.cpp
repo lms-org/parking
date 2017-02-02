@@ -76,6 +76,9 @@ bool Parking::cycle() {
         if(smallestDistance < 0.5){
             validDistanceToObstacleFront = true;
             distanceToObstacleFront = smallestDistance;
+            logger.debug("distanceToObstacleFront")<<distanceToObstacleFront;
+        }else{
+            logger.debug("no obstacle in front with the lidar found")<<smallestDistance;
         }
     }else{
         logger.warn("no lidar data given!");
@@ -124,7 +127,7 @@ bool Parking::cycle() {
         ***************************************************/
 
         //drive straight still
-        setSteeringAngles(-0.2, config().get<float>("searchingPhiFactor"), DrivingMode::FORWARD);
+        setSteeringAngles(config().get<float>("searchingMiddleOffset",-0.2), config().get<float>("searchingPhiFactor"), DrivingMode::FORWARD);
 
         //update current x-position
         updatePositionFromHall();
