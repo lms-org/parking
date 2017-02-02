@@ -27,7 +27,7 @@ bool Parking::initialize() {
 
     sensors = readChannel<sensor_utils::SensorContainer>("SENSORS");
     car = writeChannel<street_environment::CarCommand>("CAR");
-    laser_data = writeChannel<lms::math::PointCloud2f>("HOKUYO_LIDAR_DATA");
+    laser_data = writeChannel<lms::math::PointCloud2f>("LIDAR_DATA");
 
     currentXPosition = 0;
     lastTimeStamp = -1;
