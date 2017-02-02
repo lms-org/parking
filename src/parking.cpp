@@ -361,8 +361,8 @@ bool Parking::checkForGap()
 
 void Parking::updatePositionFromHall()
 {
-    if(sensors->hasSensor("HALL")) {
-        auto hall = sensors->sensor<sensor_utils::Odometer>("HALL");
+    if(sensors->hasSensor("HALL_0")) {
+        auto hall = sensors->sensor<sensor_utils::Odometer>("HALL_0");
         auto dst = hall->distance.x();
         currentXPosition += dst;
     }else{
