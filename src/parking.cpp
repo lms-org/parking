@@ -199,7 +199,7 @@ bool Parking::cycle() {
                 // set servos to max steering angle
                 state.steering_front = -delta_max;
                 state.steering_rear = delta_max;
-
+                logger.debug("driven arc")<<drivenArc<<" target: "<<alpha;
                 if (drivenArc >= alpha) {
                     firstCircleArc = false;
                 }
