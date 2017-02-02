@@ -89,10 +89,10 @@ bool Parking::cycle() {
 
 
         // check if we detected a valid parking space
+        logger.debug("searching for gap");
         bool spaceFound = checkForGap();
 
-        if(spaceFound)
-        {
+        if(spaceFound){
             timeSpaceWasFound = lms::Time::now();
             currentState = ParkingState::STOPPING;
         }
