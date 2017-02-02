@@ -65,10 +65,20 @@ bool Parking::cycle() {
     float distanceToObstacleFront = 0;
     bool validDistanceToObstacleFront = false;
     if(laser_data->points().size() > 0){
-        validDistanceToObstacleFront = true;
-        distanceToObstacleFront = laser_data->points()[laser_data->points().size()/2].x;
+        float smallestDistance = 100;
+        for(const lms::math::vertex2f &v: laser_data->points()){
+            if(std::fabs(v.angle()) < 30*M_PI/180){
+                if(v.length() < smallestDistance){
+                    smallestDistance = v.length();//TODO median
+                }
+            }
+        }
+        if(smallestDistance < 0.5){
+            validDistanceToObstacleFront = true;
+            distanceToObstacleFront = smallestDistance;
+        }
     }else{
-
+        logger.warn("no lidar data given!");
     }
 
     switch (currentState)
