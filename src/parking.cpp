@@ -366,7 +366,7 @@ void Parking::updatePositionFromHall()
         auto dst = hall->distance.x();
         currentXPosition += dst;
     }else{
-        logger.warn("no hall distance given!");
+        logger.warn("no hall distance given!")<<sensors->size();
     }
 }
 
