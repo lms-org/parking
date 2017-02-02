@@ -108,7 +108,7 @@ bool Parking::cycle() {
     //Anhalten nach Searching
     case ParkingState::STOPPING:
     {
-
+        logger.debug("STOPPING");
         /***************************************************
         * come to a stop, but dont slip (otherwise the position measurements are crap)
         ***************************************************/
@@ -142,6 +142,7 @@ bool Parking::cycle() {
     //Wir fahren in die Parklücke
     case ParkingState::ENTERING:
     {
+        logger.debug("ENTERING");
 
         state.indicatorLeft = false;
         state.indicatorRight = true;
