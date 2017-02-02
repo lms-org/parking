@@ -232,6 +232,7 @@ bool Parking::cycle() {
     }
     case ParkingState::CORRECTING:
     {
+        logger.debug("CORRECTING");
         state.indicatorLeft = false;
         state.indicatorRight = false;
 
@@ -286,6 +287,7 @@ bool Parking::cycle() {
         break;
     }
     case ParkingState::FINISHED: {
+        logger.debug("FINISHED");
 
         state.targetSpeed = 0.0;
         state.steering_front = 0.0;
@@ -308,6 +310,7 @@ bool Parking::cycle() {
         break;
     }
     case ParkingState::WORST_CASE_BACKWARDS: {
+        logger.debug("WORST_CASE_BACKWARDS");
         // TODO
 
         break;
