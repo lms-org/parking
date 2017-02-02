@@ -366,11 +366,12 @@ void Parking::updatePositionFromHall()
         auto dst = hall->distance.x();
         currentXPosition += dst;
     }else{
-        logger.warn("no hall distance given!")<<sensors->size();
+        logger.warn("no hall distance given!");
         std::string s = "";
         for(auto a:*sensors){
-            s += a.first;
+            s += a.first + ", ";
         }
+        logger.warn("sensors given:")<<s;
     }
 }
 
