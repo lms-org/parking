@@ -233,12 +233,9 @@ bool Parking::cycle() {
 
         std::vector<float> correctingDistances = config().getArray<float>("correctingDistances");
 
-        if (correctingCounter >= (int)correctingDistances.size())
-        {
+        if (correctingCounter >= (int)correctingDistances.size()){
             currentState = ParkingState::FINISHED;
-        }
-        else
-        {
+        }else{
             double phi_ist = car_yawAngle - yawAngleStartEntering;
 
             if (correctingCounter%2 == 0) //forward
@@ -350,8 +347,13 @@ void Parking::fitLineToMiddleLane(double *oM, double *oB)
     street_environment::RoadLane middleLane = getService<local_course::LocalCourse>("LOCAL_COURSE_SERVICE")->getCourse();
     std::vector<double> iX;
     std::vector<double> iY;
-
-    for (int i=config().get<int>("lineFitStartPoint", 2); i<=config().get<int>("lineFitEndPoint", 5); ++i) //get points 1 to 4
+    int lineFitStartPoint = config().get<int>("lineFitStartPoint", 2);
+    int lineFitEndPoint = config().get<int>("lineFitEndPoint", 5);
+    if(middleLane.points().size() <= lineFitEndPoint){
+        logger.error("invalid lineFitEndPoint")<<lineFitEndPoint<<" ,middle has only "<<middleLane.points().size()<<" elements";
+        lineFitEndPoint = ((int)middleLane.points().size()) -1;
+    }
+    for (int i=lineFitStartPoint; i<=lineFitEndPoint; ++i) //get points 1 to 4
     {
         iX.push_back(middleLane.points().at(i).x);
         iY.push_back(middleLane.points().at(i).y);
