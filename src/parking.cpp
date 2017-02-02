@@ -266,9 +266,9 @@ bool Parking::cycle() {
                 if(validDistanceToObstacleFront){
                     logger.debug("distanceToObstacleFront")<<distanceToObstacleFront;
                     correctingDistance = distanceToObstacleFront-0.25; //TODO
-                    logger.debug("correctingDistance")<<correctingDistance;
+                    logger.debug("correctingDistance")<<correctingDistance<<" currentXPosition "<<currentXPosition;
                 }
-                if (currentXPosition >= correctingDistances.at(correctingCounter))
+                if (currentXPosition >= correctingDistance)
                 {
                     ++correctingCounter;
                     currentXPosition = 0.0;
@@ -288,7 +288,7 @@ bool Parking::cycle() {
                     logger.debug("correctingDistance")<<correctingDistance;
                 }
 
-                if (-currentXPosition >= correctingDistances.at(correctingCounter))
+                if (-currentXPosition >= correctingDistance)
                 {
                     ++correctingCounter;
                     currentXPosition = 0.0;
