@@ -317,7 +317,7 @@ bool Parking::cycle() {
 bool Parking::checkForGap()
 {
     if(sensors->hasSensor("PARKINGLOT_" + std::to_string(0))){
-        auto parking = sensors->sensor<sensor_utils::ParkingSensor>("ParkingLot");
+        auto parking = sensors->sensor<sensor_utils::ParkingSensor>("PARKINGLOT_" + std::to_string(0));
         auto size = parking->size;
 
         if(size > config().get<float>("minParkingSpaceSize", 0.3) &&
