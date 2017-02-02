@@ -89,8 +89,8 @@ bool Parking::cycle() {
 
 
         // check if we detected a valid parking space
-        logger.debug("searching for gap");
         bool spaceFound = checkForGap();
+        logger.debug("searching for gap, found ")<<spaceFound;
 
         if(spaceFound){
             timeSpaceWasFound = lms::Time::now();
@@ -316,17 +316,17 @@ bool Parking::cycle() {
 
 bool Parking::checkForGap()
 {
-    if(sensors->hasSensor("PARKINGLOT_" + std::to_string(MAVLINK_MSG_ID_PARKING_LOT)))
-    {
+    if(sensors->hasSensor("PARKINGLOT_" + std::to_string(MAVLINK_MSG_ID_PARKING_LOT))){
         auto parking = sensors->sensor<sensor_utils::ParkingSensor>("ParkingLot");
         auto size = parking->size;
 
         if(size > config().get<float>("minParkingSpaceSize", 0.3) &&
-           size < config().get<float>("maxParkingSpaceSize", 0.75))
-        {
+           size < config().get<float>("maxParkingSpaceSize", 0.75)){
             logger.info("valid parking space found! ") << "size=" << size << ", at=" << parking->position;
             posXGap = parking->position;
             return true;
+        }else{
+            logger.info("invalid parking space found! ") << "size=" << size << ", at=" << parking->position;
         }
     }
     return false;
