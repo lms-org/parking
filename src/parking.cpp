@@ -58,7 +58,7 @@ bool Parking::cycle() {
     }
 
     if(m_cycleCounter> 10){
-        car_yawAngle += car->deltaPhi();
+        car_yawAngle += -car->deltaPhi();
     }
     m_cycleCounter++;
     logger.info("parking");
