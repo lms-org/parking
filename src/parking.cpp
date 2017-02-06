@@ -64,18 +64,23 @@ bool Parking::cycle() {
     logger.info("parking");
     float distanceToObstacleFront = 0;
     bool validDistanceToObstacleFront = false;
+    const float maxDetectionAngle = config().get<float>("obstacleDetectionAngle",30)*M_PI/180;
     if(laser_data->points().size() > 0){
-        float smallestDistance = 100;
+        float smallestDistance = 0;
+        int added = 0;
         for(const lms::math::vertex2f &v: laser_data->points()){
-            if(std::fabs(v.angle()) < config().get<float>("obstacleDetectionAngle",30)*M_PI/180){
+            if(std::fabs(v.angle()) < maxDetectionAngle){
                 if(v.length() < smallestDistance){
-                    smallestDistance = v.length();//TODO median
+                    smallestDistance += v.length();//TODO median
+                    added++;
                 }
             }
         }
-        if(smallestDistance < 0.5){
+        if(added!= 0){
+            smallestDistance /= added;
             validDistanceToObstacleFront = true;
             distanceToObstacleFront = smallestDistance;
+            logger.debug("distanceToObstacleFront")<<distanceToObstacleFront;
         }
     }else{
         logger.warn("no lidar data given!");
@@ -263,7 +268,7 @@ bool Parking::cycle() {
                 //mit dem lidar den Frontabstand Messen
                 float correctingDistance = correctingDistances.at(correctingCounter);
                 if(validDistanceToObstacleFront){
-                    logger.debug("distanceToObstacleFront")<<distanceToObstacleFront;
+                    logger.error("distanceToObstacleFront")<<distanceToObstacleFront;
                     correctingDistance = distanceToObstacleFront-config().get<float>("distanceToObstacleFront",0.28);
                     logger.debug("correctingDistance")<<correctingDistance<<" currentXPosition "<<currentXPosition;
                     if(correctingDistance < 0){
