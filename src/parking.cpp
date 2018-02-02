@@ -59,6 +59,8 @@ bool Parking::cycle() {
         }
     }
 
+
+
     if(m_cycleCounter> 10){
         car_yawAngle += -car->deltaPhi();
     }
@@ -128,6 +130,7 @@ bool Parking::cycle() {
     case ParkingState::STOPPING:
     {
         logger.debug("STOPPING");
+
         /***************************************************
         * come to a stop, but dont slip (otherwise the position measurements are crap)
         ***************************************************/
@@ -403,9 +406,10 @@ bool Parking::cycle() {
             break;
         }
         case PullOutState::BACK_ON_TRACK: {
-            state.targetSpeed = 0;
-            state.steering_front = 0;
-            state.steering_rear = 0;
+
+            // switch mode back to FOH
+            state.state = street_environment::CarCommand::StateType::PARKING_FINISHED;
+
             break;
         } // case BACK_ON_TRACK
         } // switch PullOutState::BACK_ON_TRACK
