@@ -14,13 +14,14 @@
 #include <sensor_utils/odometer.h>
 #include <sensor_utils/parking_sensor.h>
 #include <lms/math/point_cloud.h>
+#include <float.h>
 
 
 class Parking : public lms::Module {
 public:
     enum DrivingMode {FORWARD, BACKWARDS};
-    enum ParkingState {SEARCHING, STOPPING, ENTERING, CORRECTING, FINISHED, WORST_CASE_BACKWARDS};
-
+    enum ParkingState {SEARCHING, STOPPING, ENTERING, CORRECTING, FINISHED, WORST_CASE_BACKWARDS, PULLOUT};
+    enum PullOutState {PULLBACK, TURN_LEFT, MOVE_STRAIGHT,  TURN_RIGHT, BACK_ON_TRACK};
 
     struct ParkingStateContainer{
         ParkingState state;
@@ -43,7 +44,7 @@ public:
     lms::ReadDataChannel<sensor_utils::SensorContainer> sensors;
     lms::WriteDataChannel<street_environment::CarCommand> car;
     lms::WriteDataChannel<lms::math::PointCloud2f> laser_data;
-
+    PullOutState pulloutstate;
     ParkingState currentState;
     bool firstCircleArc;
     double lastTimeStamp, lastImuTimeStamp, currentXPosition;
@@ -63,6 +64,7 @@ public:
 
     //hack
     int m_cycleCounter;
+    double move_straight_start_pos;
 
 };
 

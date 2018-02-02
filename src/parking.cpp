@@ -20,7 +20,7 @@ bool Parking::initialize() {
 
     state.priority = 100;
     state.name = "PARKING";
-
+    pulloutstate = PullOutState::PULLBACK;
     currentState = ParkingState::SEARCHING;
     firstCircleArc = true;
     parkingSpaceSize = 0.0;
@@ -32,6 +32,8 @@ bool Parking::initialize() {
     currentXPosition = 0;
     lastTimeStamp = -1;
     lastImuTimeStamp = -1;
+
+    move_straight_start_pos = 0;
 
 
     return true;
@@ -66,18 +68,22 @@ bool Parking::cycle() {
     bool validDistanceToObstacleFront = false;
     const float maxDetectionAngle = config().get<float>("obstacleDetectionAngle",30)*M_PI/180;
     if(laser_data->points().size() > 0){
-        float smallestDistance = 0;
+        float smallestDistance = FLT_MAX;
         int added = 0;
+
         for(const lms::math::vertex2f &v: laser_data->points()){
             if(std::fabs(v.angle()) < maxDetectionAngle){
+                // get smallest distance
                 if(v.length() < smallestDistance){
-                    smallestDistance += v.length();//TODO median
+                    smallestDistance = v.length();
                     added++;
+
                 }
             }
         }
+
+
         if(added!= 0){
-            smallestDistance /= added;
             validDistanceToObstacleFront = true;
             distanceToObstacleFront = smallestDistance;
             logger.debug("distanceToObstacleFront")<<distanceToObstacleFront;
@@ -88,7 +94,6 @@ bool Parking::cycle() {
 
     switch (currentState)
     {
-
     case ParkingState::SEARCHING:
     {
 
@@ -119,7 +124,6 @@ bool Parking::cycle() {
 
         break;
     }
-
     //Anhalten nach Searching
     case ParkingState::STOPPING:
     {
@@ -153,7 +157,6 @@ bool Parking::cycle() {
 
         break;
     }
-
     //Wir fahren in die Parklücke
     case ParkingState::ENTERING:
     {
@@ -178,9 +181,9 @@ bool Parking::cycle() {
         //TODO delta_max + 1*pi/180;
         const double r = lr/2*tan(M_PI/2 - (delta_max-1*M_PI/180)); //Radius des Wendekreises (bezogen auf den Fahrzeugmittelpunkt) bei Volleinschlag beider Achsen
         const double R = sqrt(l*l/4 + (r+b/2)*(r+b/2)); //Radius den das äußerste Eck des Fahrzeugs bei volleingeschlagenen Rädern zurücklegt
-        const double s = sqrt((R+k)*(R+k) - (parkingSpaceSize - d - l/2)*(parkingSpaceSize - d - l/2));
+        const double s = sqrt((R+k)*(R+k) - ( - d - l/2)*( - d - l/2));
         const double alpha = acos((r-y0+s)/(2*r)); //Winkel (in rad) der 2 Kreisboegen, die zum einfahren genutzt werden
-        const double x0 = d + l/2 + 2*r*sin(alpha) - parkingSpaceSize; //Abstand vom Ende der 2. Box zur Mitte des Fahrzeugs bei Lenkbeginn (Anfang erster Kreisbogen)
+        const double x0 = d + l/2 + 2*r*sin(alpha); //Abstand vom Ende der 2. Box zur Mitte des Fahrzeugs bei Lenkbeginn (Anfang erster Kreisbogen)
         const double x_begin_steering = config().get<float>("xDistanceCorrection",0.09) + endX + x0 - config().get<float>("distanceMidLidarX", 0.09);
         //drive straight backwards
         if (currentXPosition > x_begin_steering){
@@ -267,7 +270,8 @@ bool Parking::cycle() {
                 logger.error("forward Correcting");
                 //mit dem lidar den Frontabstand Messen
                 float correctingDistance = correctingDistances.at(correctingCounter);
-                if(validDistanceToObstacleFront){
+                // TODO: this doesnt work
+                if(false && validDistanceToObstacleFront){
                     logger.error("distanceToObstacleFront")<<distanceToObstacleFront;
                     correctingDistance = distanceToObstacleFront-config().get<float>("distanceToObstacleFront",0.28);
                     logger.debug("correctingDistance")<<correctingDistance<<" currentXPosition "<<currentXPosition;
@@ -291,7 +295,8 @@ bool Parking::cycle() {
 
                 logger.error("backwards Correcting");
                 float correctingDistance = correctingDistances.at(correctingCounter);
-                if(validDistanceToObstacleFront){
+                // TODO: this doesnt work
+                if(false && validDistanceToObstacleFront){
                     logger.debug("distanceToObstacleFront")<<distanceToObstacleFront;
                     correctingDistance = 0.53-distanceToObstacleFront-config().get<float>("distanceToObstacleRear",0.1);
                     logger.debug("correctingDistance")<<correctingDistance<<" currentXPosition "<<currentXPosition;
@@ -320,10 +325,14 @@ bool Parking::cycle() {
         state.steering_front = 0.0;
         state.steering_rear = 0.0;
 
+        // we are done
         if (finishCounter > 10)
         {
             state.indicatorLeft = false;
             state.indicatorRight = false;
+            currentState = ParkingState::PULLOUT;
+            car_yawAngle = 0;
+
         }
         else
         {
@@ -342,13 +351,72 @@ bool Parking::cycle() {
 
         break;
     }
+    case ParkingState::PULLOUT: {
+        logger.debug("PULL_OUT");
+        switch(pulloutstate)
+        {
 
-    }
+        case PullOutState::PULLBACK:{
 
+            state.targetSpeed = -0.5;
+            state.steering_front = 0;
+            state.steering_rear = 0;
+
+            if(distanceToObstacleFront - 0.27 > 0.16)
+            {
+                //state.targetSpeed = 0.0;
+                pulloutstate = PullOutState::TURN_LEFT;
+
+            }
+
+            break;
+        }
+        case PullOutState::TURN_LEFT:{
+            state.targetSpeed = 1.0;
+            state.steering_front = config().get("maxSteeringAngle", 24);
+            state.steering_rear = -config().get("maxSteeringAngle", 24);
+            move_straight_start_pos = currentXPosition;
+            if(car_yawAngle >= 1.1)
+            {
+                pulloutstate=PullOutState::MOVE_STRAIGHT;
+            }
+            break;
+        }
+        case PullOutState::MOVE_STRAIGHT:{
+            state.steering_front = 0;
+            state.steering_rear = 0;
+            state.targetSpeed = 1.0;
+            if(move_straight_start_pos + 0.1 > currentXPosition){
+                pulloutstate=PullOutState::TURN_RIGHT;
+            }
+            break;
+
+        }
+        case PullOutState::TURN_RIGHT:{
+            state.targetSpeed = 1.0;
+            state.steering_front = -config().get("maxSteeringAngle", 24);
+            state.steering_rear = config().get("maxSteeringAngle", 24);
+            if(car_yawAngle <= 0.3)
+            {
+                pulloutstate=PullOutState::BACK_ON_TRACK;
+            }
+            break;
+        }
+        case PullOutState::BACK_ON_TRACK: {
+            state.targetSpeed = 0;
+            state.steering_front = 0;
+            state.steering_rear = 0;
+            break;
+        } // case BACK_ON_TRACK
+        } // switch PullOutState::BACK_ON_TRACK
+    } // case ParkingState::PULLOUT
+    } // switch current state
 
     car->putState(state);
     return true;
-}
+
+} // cycle
+
 
 bool Parking::checkForGap()
 {
@@ -360,6 +428,7 @@ bool Parking::checkForGap()
            size < config().get<float>("maxParkingSpaceSize", 0.75)){
             logger.info("valid parking space found! ") << "size=" << size << ", at=" << parking->position;
             posXGap = parking->position;
+            parkingSpaceSize = size;
             return true;
         }else{
             logger.info("invalid parking space found! ") << "size=" << size << ", at=" << parking->position;
