@@ -65,6 +65,8 @@ public:
     //hack
     int m_cycleCounter;
     double move_straight_start_pos;
+    double finished_pos;
+    float initial_phi;
 
 };
 

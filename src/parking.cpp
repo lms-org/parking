@@ -34,6 +34,12 @@ bool Parking::initialize() {
     lastImuTimeStamp = -1;
 
     move_straight_start_pos = 0;
+    finished_pos = 0;
+
+    // calculate initial phi
+    double m, b;
+    fitLineToMiddleLane(&m, &b);
+    initial_phi = -atan(m);
 
 
     return true;
@@ -107,8 +113,9 @@ bool Parking::cycle() {
          * drive straight along the middle of the right lane
          ***************************************************/
 
+
         //the desired state is such that phi=0 (straight driving) and y=0.2 (middle of right lane) with respect to the middle lane
-        setSteeringAngles(config().get<float>("searchingMiddleOffset",-0.2), config().get<float>("searchingPhiFactor"), DrivingMode::FORWARD);
+        setSteeringAngles(config().get<float>("searchingMiddleOffset",-0.2), -initial_phi, DrivingMode::FORWARD);
 
         state.targetSpeed = config().get<float>("velocitySearching", 1.0);
 
@@ -120,7 +127,6 @@ bool Parking::cycle() {
         logger.debug("searching for gap, found ")<<spaceFound;
 
         if(spaceFound){
-            timeSpaceWasFound = lms::Time::now();
             currentState = ParkingState::STOPPING;
         }
 
@@ -328,13 +334,16 @@ bool Parking::cycle() {
         state.steering_front = 0.0;
         state.steering_rear = 0.0;
 
+        updatePositionFromHall();
+
         // we are done
-        if (finishCounter > 10)
+        if (finishCounter > config().get<int>("waitInFinished", 50))
         {
             state.indicatorLeft = false;
             state.indicatorRight = false;
             currentState = ParkingState::PULLOUT;
             car_yawAngle = 0;
+            finished_pos = currentXPosition;
 
         }
         else
@@ -356,16 +365,19 @@ bool Parking::cycle() {
     }
     case ParkingState::PULLOUT: {
         logger.debug("PULL_OUT");
+
+        updatePositionFromHall();
+
         switch(pulloutstate)
         {
 
         case PullOutState::PULLBACK:{
 
-            state.targetSpeed = -0.5;
+            state.targetSpeed = config().get<float>("velocityPullback", -0.5);
             state.steering_front = 0;
             state.steering_rear = 0;
 
-            if(distanceToObstacleFront - 0.27 > 0.16)
+            if(finished_pos - config().get<float>("driveBackwards", 0.05) > currentXPosition)
             {
                 //state.targetSpeed = 0.0;
                 pulloutstate = PullOutState::TURN_LEFT;
@@ -375,11 +387,11 @@ bool Parking::cycle() {
             break;
         }
         case PullOutState::TURN_LEFT:{
-            state.targetSpeed = 1.0;
+            state.targetSpeed = config().get<float>("velocityTurnLeft", 1);
             state.steering_front = config().get("maxSteeringAngle", 24);
             state.steering_rear = -config().get("maxSteeringAngle", 24);
             move_straight_start_pos = currentXPosition;
-            if(car_yawAngle >= 1.1)
+            if(car_yawAngle >= config().get<float>("turnYaw", 0.8))
             {
                 pulloutstate=PullOutState::MOVE_STRAIGHT;
             }
@@ -388,18 +400,18 @@ bool Parking::cycle() {
         case PullOutState::MOVE_STRAIGHT:{
             state.steering_front = 0;
             state.steering_rear = 0;
-            state.targetSpeed = 1.0;
-            if(move_straight_start_pos + 0.1 > currentXPosition){
+            state.targetSpeed = config().get<float>("velocityMoveStraight", 1);
+            if(move_straight_start_pos + config().get<float>("moveStraight", 0.1) < currentXPosition){
                 pulloutstate=PullOutState::TURN_RIGHT;
             }
             break;
 
         }
         case PullOutState::TURN_RIGHT:{
-            state.targetSpeed = 1.0;
+            state.targetSpeed = config().get<float>("velocityTurnRight", 1);;
             state.steering_front = -config().get("maxSteeringAngle", 24);
             state.steering_rear = config().get("maxSteeringAngle", 24);
-            if(car_yawAngle <= 0.3)
+            if(car_yawAngle <= config().get<float>("turnYaw2", 0.2))
             {
                 pulloutstate=PullOutState::BACK_ON_TRACK;
             }
@@ -408,7 +420,10 @@ bool Parking::cycle() {
         case PullOutState::BACK_ON_TRACK: {
 
             // switch mode back to FOH
-            state.state = street_environment::CarCommand::StateType::PARKING_FINISHED;
+            getService<phoenix_CC2016_service::Phoenix_CC2016Service>("PHOENIX_SERVICE")->setDriveMode(phoenix_CC2016_service::CCDriveMode::PARKING_END);
+            //state.targetSpeed = 0;
+            //state.steering_front = 0;
+            //state.steering_rear = 0;
 
             break;
         } // case BACK_ON_TRACK
@@ -428,11 +443,24 @@ bool Parking::checkForGap()
         auto parking = sensors->sensor<sensor_utils::ParkingSensor>("PARKINGLOT_" + std::to_string(0));
         auto size = parking->size;
 
+
+        // old gap data
+        if(timeSpaceWasFound == parking->timestamp())
+        {
+            return false;
+        }
+
+
+        timeSpaceWasFound = parking->timestamp();
+
         if(size > config().get<float>("minParkingSpaceSize", 0.3) &&
            size < config().get<float>("maxParkingSpaceSize", 0.75)){
-            logger.info("valid parking space found! ") << "size=" << size << ", at=" << parking->position;
+            logger.debug("valid parking space found! ") << "size=" << size << ", at=" << parking->position;
             posXGap = parking->position;
             parkingSpaceSize = size;
+
+
+
             return true;
         }else{
             logger.info("invalid parking space found! ") << "size=" << size << ", at=" << parking->position;
