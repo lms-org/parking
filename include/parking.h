@@ -68,6 +68,8 @@ public:
     double finished_pos;
     float initial_phi;
 
+    double oldDeltaPhi;
+
 };
 
 #endif // PARKING_H

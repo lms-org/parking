@@ -35,11 +35,7 @@ bool Parking::initialize() {
 
     move_straight_start_pos = 0;
     finished_pos = 0;
-
-    // calculate initial phi
-    double m, b;
-    fitLineToMiddleLane(&m, &b);
-    initial_phi = -atan(m);
+    oldDeltaPhi = 0;
 
 
     return true;
@@ -68,8 +64,17 @@ bool Parking::cycle() {
 
 
     if(m_cycleCounter> 10){
-        car_yawAngle += -car->deltaPhi();
+        logger.error("yaw angle: ") << car_yawAngle*(float)180/M_PI;
+
+        if(config().get<float>("ignoreDeltaYawBiggerThan", 0.09) >= std::fabs(car->deltaPhi()))
+        {
+            car_yawAngle += -car->deltaPhi();
+            oldDeltaPhi = car->deltaPhi();
+        }else{
+            car_yawAngle += -oldDeltaPhi;
+        }
     }
+
     m_cycleCounter++;
     logger.info("parking");
     float distanceToObstacleFront = 0;
@@ -115,7 +120,7 @@ bool Parking::cycle() {
 
 
         //the desired state is such that phi=0 (straight driving) and y=0.2 (middle of right lane) with respect to the middle lane
-        setSteeringAngles(config().get<float>("searchingMiddleOffset",-0.2), -initial_phi, DrivingMode::FORWARD);
+        setSteeringAngles(config().get<float>("searchingMiddleOffset",-0.2), config().get<float>("searchingAngle", 0), DrivingMode::FORWARD);
 
         state.targetSpeed = config().get<float>("velocitySearching", 1.0);
 
@@ -276,12 +281,12 @@ bool Parking::cycle() {
                 state.targetSpeed = config().get<float>("velocityCorrecting", 0.5);
                 setSteeringAngles(-0.29, 0.0, 0.0, 0.0*phi_ist, DrivingMode::FORWARD);
 
-                logger.error("forward Correcting");
+                logger.debug("forward Correcting");
                 //mit dem lidar den Frontabstand Messen
                 float correctingDistance = correctingDistances.at(correctingCounter);
                 // TODO: this doesnt work
                 if(false && validDistanceToObstacleFront){
-                    logger.error("distanceToObstacleFront")<<distanceToObstacleFront;
+                    logger.debug("distanceToObstacleFront")<<distanceToObstacleFront;
                     correctingDistance = distanceToObstacleFront-config().get<float>("distanceToObstacleFront",0.28);
                     logger.debug("correctingDistance")<<correctingDistance<<" currentXPosition "<<currentXPosition;
                     if(correctingDistance < 0){
