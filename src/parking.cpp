@@ -382,7 +382,9 @@ bool Parking::cycle() {
             state.steering_front = 0;
             state.steering_rear = 0;
 
-            if(finished_pos - config().get<float>("driveBackwards", 0.05) > currentXPosition)
+            float luecken_factor = (parkingSpaceSize - config().get("minParkingSpaceSize", 0.60))/(float)(config().get<float>("maxParkingSpaceSize", 0.80) - config().get<float>("minParkingSpaceSize", 0.60));
+
+            if(finished_pos - luecken_factor*config().get<float>("driveBackwardsDynamic", 0.05) - config().get<float>("driveBackwards", 0.05) > currentXPosition)
             {
                 //state.targetSpeed = 0.0;
                 pulloutstate = PullOutState::TURN_LEFT;
